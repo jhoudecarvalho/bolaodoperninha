@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { PredictionsAPI } from '../api/client.js';
 import { formatLocal, isToday } from '../utils/datetime.js';
 import CountdownTimer from './CountdownTimer.jsx';
 import ScoreInput from './ScoreInput.jsx';
-import PlayerSelector from './PlayerSelector.jsx';
 
 function StatusBadge({ match }) {
   if (match.status === 'live') {
@@ -30,34 +29,28 @@ function StatusBadge({ match }) {
  * Card de jogo reutilizável.
  *  - showQuickPredict: habilita o fluxo de palpite rápido inline (Home)
  *  - showPredictions: exibe a lista de palpites já feitos para o jogo
- *  - players: lista para seleção de jogador
+ *  - playerId / playerName: o jogador do usuário logado (palpita por si)
  *  - onSaved: callback após salvar
  */
 export default function MatchCard({
   match,
-  players = [],
+  playerId = null,
+  playerName = '',
   showQuickPredict = false,
   showPredictions = false,
   onSaved,
 }) {
   const [open, setOpen] = useState(false);
-  const [playerId, setPlayerId] = useState(players.length === 1 ? players[0].id : null);
   const [predictions, setPredictions] = useState([]);
   const [home, setHome] = useState('');
   const [away, setAway] = useState('');
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
+  const [myPred, setMyPred] = useState(null); // palpite do próprio jogador (com placar)
 
   const locked = match.locked;
   const hasResult = match.home_score != null && match.away_score != null;
   const today = isToday(match.kick_off_utc);
-
-  const [myPred, setMyPred] = useState(null); // palpite do jogador selecionado (com placar)
-
-  const predictedIds = useMemo(
-    () => new Set(predictions.map((p) => p.player_id)),
-    [predictions]
-  );
 
   // Carrega palpites quando o card abre para palpitar OU quando deve exibi-los
   useEffect(() => {
@@ -86,7 +79,7 @@ export default function MatchCard({
 
   async function handleSave() {
     if (!playerId) {
-      setMsg({ type: 'err', text: 'Selecione um jogador' });
+      setMsg({ type: 'err', text: 'Sem jogador vinculado. Faça login novamente.' });
       return;
     }
     if (home === '' || away === '') {
@@ -224,13 +217,10 @@ export default function MatchCard({
 
               {open && (
                 <div className="mt-3 space-y-3 animate-fadeIn">
-                  {players.length > 1 && (
-                    <PlayerSelector
-                      players={players}
-                      value={playerId}
-                      onChange={setPlayerId}
-                      predictedIds={predictedIds}
-                    />
+                  {playerName && (
+                    <p className="text-center text-xs text-ink-mut">
+                      Palpite de <b className="text-ink">{playerName}</b>
+                    </p>
                   )}
 
                   {myPred && (

@@ -9,6 +9,28 @@ function validScore(v) {
   return Number.isInteger(v) && v >= 0 && v <= 99;
 }
 
+/**
+ * Garante que o participante só palpite pelo SEU próprio jogador.
+ * (Substitui o antigo PIN: cada login só joga por si.)
+ */
+function ownPlayerOnly(req, res, next) {
+  const myPlayer = req.user?.player_id;
+  if (!myPlayer) {
+    return res.status(403).json({
+      error: 'Sem jogador vinculado',
+      message: 'Seu usuário ainda não tem um jogador. Faça login novamente.',
+    });
+  }
+  const sent = Number(req.body?.player_id);
+  if (!sent || sent !== Number(myPlayer)) {
+    return res.status(403).json({
+      error: 'Ação não permitida',
+      message: 'Você só pode palpitar por você mesmo.',
+    });
+  }
+  next();
+}
+
 // GET /api/predictions?player_id=1  |  ?match_id=5
 router.get('/', async (req, res) => {
   try {
@@ -58,7 +80,7 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/predictions  { player_id, match_id, home_score, away_score }
-router.post('/', denyAdmin, lockCheck, async (req, res) => {
+router.post('/', denyAdmin, ownPlayerOnly, lockCheck, async (req, res) => {
   try {
     const player_id = Number(req.body?.player_id);
     const match_id = Number(req.body?.match_id);
@@ -84,7 +106,7 @@ router.post('/', denyAdmin, lockCheck, async (req, res) => {
 });
 
 // POST /api/predictions/bulk  { player_id, predictions: [{ match_id, home_score, away_score }] }
-router.post('/bulk', denyAdmin, lockCheck, async (req, res) => {
+router.post('/bulk', denyAdmin, ownPlayerOnly, lockCheck, async (req, res) => {
   const conn = await pool.getConnection();
   try {
     const player_id = Number(req.body?.player_id);

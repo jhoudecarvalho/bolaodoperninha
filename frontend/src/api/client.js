@@ -43,6 +43,13 @@ export const PlayersAPI = {
   remove: (id) => api.delete(`/players/${id}`).then((r) => r.data),
 };
 
+// Participantes (login + jogador) — gerenciado pelo admin
+export const UsersAPI = {
+  list: () => api.get('/users').then((r) => r.data),
+  create: (data) => api.post('/users', data).then((r) => r.data),
+  remove: (id) => api.delete(`/users/${id}`).then((r) => r.data),
+};
+
 export const MatchesAPI = {
   list: (params) => api.get('/matches', { params }).then((r) => r.data),
   upcoming: (limit = 10) =>

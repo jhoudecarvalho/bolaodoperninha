@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MatchesAPI, PlayersAPI, RankingAPI } from '../api/client.js';
+import { MatchesAPI, RankingAPI } from '../api/client.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import LiveBanner from '../components/LiveBanner.jsx';
 import MatchCard from '../components/MatchCard.jsx';
 import RankingTable from '../components/RankingTable.jsx';
 
 const MENU = [
-  { to: '/jogadores', label: '👥 Jogadores', desc: 'Cadastre até 15' },
+  { to: '/jogadores', label: '👥 Participantes', desc: 'Gerenciar (admin)' },
   { to: '/palpites', label: '🎯 Palpites', desc: 'Por grupo' },
   { to: '/resultados', label: '📊 Resultados', desc: 'API + manual' },
   { to: '/ranking', label: '🏆 Ranking', desc: 'Tempo real' },
@@ -19,19 +19,16 @@ export default function Home() {
   const isAdmin = user?.role === 'admin';
   const [live, setLive] = useState([]);
   const [upcoming, setUpcoming] = useState([]);
-  const [players, setPlayers] = useState([]);
   const [ranking, setRanking] = useState([]);
 
   async function load() {
-    const [liveData, up, pl, rk] = await Promise.all([
+    const [liveData, up, rk] = await Promise.all([
       MatchesAPI.list({ status: 'live' }).catch(() => []),
       MatchesAPI.upcoming(10).catch(() => []),
-      PlayersAPI.list().catch(() => []),
       RankingAPI.list().catch(() => []),
     ]);
     setLive(liveData);
     setUpcoming(up);
-    setPlayers(pl);
     setRanking(rk);
   }
 
@@ -83,12 +80,9 @@ export default function Home() {
               🛡️ Modo administrador: você acompanha tudo, mas não dá palpites.
             </p>
           )}
-          {!isAdmin && players.length === 0 && (
+          {!isAdmin && !user?.player_id && (
             <p className="mb-3 rounded-lg border border-warn/40 bg-warn/10 p-3 text-sm text-warn">
-              Cadastre ao menos um jogador para palpitar.{' '}
-              <Link to="/jogadores" className="underline">
-                Cadastrar
-              </Link>
+              Seu usuário ainda não tem um jogador vinculado. Saia e entre novamente.
             </p>
           )}
           <div className="space-y-3">
@@ -96,9 +90,10 @@ export default function Home() {
               <MatchCard
                 key={m.id}
                 match={m}
-                players={players}
+                playerId={!isAdmin ? user?.player_id : null}
+                playerName={!isAdmin ? user?.name : ''}
                 showPredictions
-                showQuickPredict={!isAdmin && players.length > 0}
+                showQuickPredict={!isAdmin && !!user?.player_id}
                 onSaved={load}
               />
             ))}

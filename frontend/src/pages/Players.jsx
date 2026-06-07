@@ -1,21 +1,23 @@
 import { useEffect, useState } from 'react';
-import { PlayersAPI } from '../api/client.js';
+import { UsersAPI } from '../api/client.js';
+import { useAuth } from '../auth/AuthContext.jsx';
+import { formatPhoneBR } from '../utils/phone.js';
 
 export default function Players() {
-  const [players, setPlayers] = useState([]);
-  const [suggestions, setSuggestions] = useState([]);
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+
+  const [participants, setParticipants] = useState([]);
   const [name, setName] = useState('');
-  const [pin, setPin] = useState('');
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
+  const [ok, setOk] = useState(null);
   const [loading, setLoading] = useState(false);
 
   async function load() {
-    const [pl, sg] = await Promise.all([
-      PlayersAPI.list().catch(() => []),
-      PlayersAPI.suggestions().catch(() => []),
-    ]);
-    setPlayers(pl);
-    setSuggestions(sg);
+    if (!isAdmin) return;
+    setParticipants(await UsersAPI.list().catch(() => []));
   }
   useEffect(() => {
     load();
@@ -24,11 +26,14 @@ export default function Players() {
   async function handleAdd(e) {
     e.preventDefault();
     setError(null);
+    setOk(null);
     setLoading(true);
     try {
-      await PlayersAPI.create({ name: name.trim(), pin: pin || undefined });
+      await UsersAPI.create({ name: name.trim(), phone, password });
       setName('');
-      setPin('');
+      setPhone('');
+      setPassword('');
+      setOk('Participante cadastrado! Ele já pode entrar com o celular e a senha.');
       await load();
     } catch (err) {
       setError(err.response?.data?.error || 'Erro ao cadastrar');
@@ -37,92 +42,88 @@ export default function Players() {
     }
   }
 
-  async function handleAddByName(pname) {
-    setError(null);
-    try {
-      await PlayersAPI.create({ name: pname });
-      await load();
-    } catch (err) {
-      setError(err.response?.data?.error || 'Erro ao cadastrar');
-    }
+  async function handleRemove(id, pname) {
+    if (!confirm(`Remover ${pname}? O login, o jogador e todos os palpites dele serão apagados.`)) return;
+    await UsersAPI.remove(id);
+    await load();
   }
 
-  async function handleRemove(id, pname) {
-    if (!confirm(`Remover ${pname}? Todos os palpites dele serão apagados.`)) return;
-    await PlayersAPI.remove(id);
-    await load();
+  if (!isAdmin) {
+    return (
+      <div className="space-y-6">
+        <h1 className="font-display text-2xl font-bold">👥 Participantes</h1>
+        <p className="rounded-lg border border-warn/40 bg-warn/10 p-4 text-sm text-warn">
+          🛡️ Apenas o administrador cadastra e gerencia os participantes.
+        </p>
+      </div>
+    );
   }
 
   return (
     <div className="space-y-6">
-      <h1 className="font-display text-2xl font-bold">👥 Jogadores</h1>
+      <h1 className="font-display text-2xl font-bold">👥 Participantes</h1>
+      <p className="text-sm text-ink-mut">
+        Cadastre cada pessoa com <b>nome</b>, <b>celular</b> e <b>senha</b>. O sistema cria o
+        login e o jogador do bolão automaticamente — ela entra e palpita por si mesma.
+      </p>
 
       <form onSubmit={handleAdd} className="card flex flex-wrap items-end gap-3 p-4">
-        <div className="flex-1 min-w-[180px]">
+        <div className="flex-1 min-w-[160px]">
           <label className="mb-1 block text-xs text-ink-mut">Nome</label>
           <input
             className="w-full rounded-lg border border-line-light bg-bg-900 px-3 py-2 focus:border-gold focus:outline-none"
             value={name}
-            maxLength={30}
+            maxLength={60}
             placeholder="Nome do participante"
             onChange={(e) => setName(e.target.value)}
           />
         </div>
-        <div className="w-28">
-          <label className="mb-1 block text-xs text-ink-mut">PIN (opcional)</label>
+        <div className="w-44">
+          <label className="mb-1 block text-xs text-ink-mut">Celular</label>
           <input
             className="w-full rounded-lg border border-line-light bg-bg-900 px-3 py-2 focus:border-gold focus:outline-none"
-            value={pin}
-            maxLength={4}
+            value={phone}
             inputMode="numeric"
-            placeholder="0000"
-            onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+            maxLength={16}
+            placeholder="(11) 91234-5678"
+            onChange={(e) => setPhone(formatPhoneBR(e.target.value))}
           />
         </div>
-        <button className="btn-gold" disabled={loading || !name.trim()}>
-          {loading ? '...' : '+ Adicionar'}
+        <div className="w-36">
+          <label className="mb-1 block text-xs text-ink-mut">Senha</label>
+          <input
+            type="text"
+            className="w-full rounded-lg border border-line-light bg-bg-900 px-3 py-2 focus:border-gold focus:outline-none"
+            value={password}
+            placeholder="senha"
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </div>
+        <button className="btn-gold" disabled={loading || !name.trim() || !phone || !password}>
+          {loading ? '...' : '+ Cadastrar'}
         </button>
       </form>
 
       {error && <p className="text-sm text-danger">{error}</p>}
-
-      {suggestions.length > 0 && (
-        <div className="card p-4">
-          <p className="mb-2 text-xs text-ink-mut">
-            Participantes cadastrados (login) ainda sem jogador no bolão:
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {suggestions.map((s) => (
-              <button
-                key={s.id}
-                className="btn border border-line-light px-3 py-1 text-sm hover:bg-bg-800"
-                onClick={() => handleAddByName(s.name)}
-              >
-                + {s.name}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      {ok && <p className="text-sm text-ok">{ok}</p>}
 
       <p className="text-sm text-ink-mut">
-        {players.length} {players.length === 1 ? 'jogador' : 'jogadores'} cadastrado
-        {players.length === 1 ? '' : 's'}
+        {participants.length} {participants.length === 1 ? 'participante' : 'participantes'}
       </p>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {players.map((p) => (
+        {participants.map((p) => (
           <div key={p.id} className="card flex items-center justify-between p-4">
             <div className="flex items-center gap-3">
               <span
                 className="flex h-9 w-9 items-center justify-center rounded-full font-bold text-bg-900"
-                style={{ backgroundColor: p.avatar_color }}
+                style={{ backgroundColor: p.avatar_color || '#c8aa6e' }}
               >
                 {p.name.charAt(0).toUpperCase()}
               </span>
               <div>
                 <div className="font-medium">{p.name}</div>
-                {p.has_pin && <div className="text-xs text-ink-mut">🔑 com PIN</div>}
+                <div className="text-xs text-ink-mut">{formatPhoneBR(p.phone)}</div>
               </div>
             </div>
             <button
@@ -134,7 +135,7 @@ export default function Players() {
             </button>
           </div>
         ))}
-        {!players.length && <p className="text-ink-mut">Nenhum jogador cadastrado.</p>}
+        {!participants.length && <p className="text-ink-mut">Nenhum participante cadastrado.</p>}
       </div>
     </div>
   );

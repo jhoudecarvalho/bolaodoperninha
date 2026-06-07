@@ -49,3 +49,13 @@ export function denyAdmin(req, res, next) {
   }
   next();
 }
+
+/**
+ * Exige que o usuário seja admin.
+ */
+export function requireAdmin(req, res, next) {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Apenas o administrador pode fazer isso' });
+  }
+  next();
+}

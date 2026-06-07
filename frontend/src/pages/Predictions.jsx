@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { MatchesAPI, PlayersAPI, PredictionsAPI } from '../api/client.js';
+import { MatchesAPI, PredictionsAPI } from '../api/client.js';
 import { useAuth } from '../auth/AuthContext.jsx';
-import PlayerSelector from '../components/PlayerSelector.jsx';
 import ScoreInput from '../components/ScoreInput.jsx';
 import CountdownTimer from '../components/CountdownTimer.jsx';
 import { formatLocal, isToday } from '../utils/datetime.js';
@@ -11,26 +10,14 @@ const GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
 export default function Predictions() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
-  const [players, setPlayers] = useState([]);
-  const [playerId, setPlayerId] = useState(null);
+  // O participante palpita sempre pelo seu próprio jogador.
+  const playerId = user?.player_id ?? null;
   const [group, setGroup] = useState('A');
   const [matches, setMatches] = useState([]);
   const [preds, setPreds] = useState({}); // match_id -> { home, away }
   const [saved, setSaved] = useState({}); // match_id -> { home, away } (no servidor)
   const [msg, setMsg] = useState(null);
   const [saving, setSaving] = useState(false);
-
-  // Carrega jogadores e pré-seleciona o player vinculado ao usuário logado
-  useEffect(() => {
-    PlayersAPI.list().then((pl) => {
-      setPlayers(pl);
-      if (user?.player_id && pl.some((p) => p.id === user.player_id)) {
-        setPlayerId(user.player_id);
-      } else if (pl.length === 1) {
-        setPlayerId(pl[0].id);
-      }
-    });
-  }, [user?.player_id]);
 
   // Carrega jogos do grupo
   useEffect(() => {
@@ -121,16 +108,24 @@ export default function Predictions() {
     <div className="space-y-6">
       <h1 className="font-display text-2xl font-bold">🎯 Palpites</h1>
 
-      {players.length === 0 ? (
+      {!playerId ? (
         <p className="rounded-lg border border-warn/40 bg-warn/10 p-3 text-sm text-warn">
-          Cadastre jogadores primeiro na aba 👥 Jogadores.
+          Seu usuário ainda não tem um jogador vinculado. Saia e entre novamente.
         </p>
       ) : (
         <>
-          {/* Seleção de jogador */}
-          <div className="card p-4">
-            <h2 className="mb-2 text-sm text-ink-mut">Selecione o jogador</h2>
-            <PlayerSelector players={players} value={playerId} onChange={setPlayerId} />
+          {/* Quem está palpitando */}
+          <div className="card flex items-center gap-3 p-4">
+            <span
+              className="flex h-9 w-9 items-center justify-center rounded-full font-bold text-bg-900"
+              style={{ backgroundColor: '#c8aa6e' }}
+            >
+              {user?.name?.charAt(0).toUpperCase()}
+            </span>
+            <div className="text-sm">
+              <div className="text-ink-mut">Palpitando como</div>
+              <div className="font-medium">{user?.name}</div>
+            </div>
           </div>
 
           {/* Seleção de grupo */}
@@ -155,10 +150,6 @@ export default function Predictions() {
               <span className="text-danger">🔒 {stats.locked} bloqueados</span>
             </div>
           </div>
-
-          {!playerId && (
-            <p className="text-sm text-warn">Selecione um jogador para palpitar.</p>
-          )}
 
           {/* Formulário por grupo */}
           {playerId && (

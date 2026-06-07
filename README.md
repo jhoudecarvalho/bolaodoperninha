@@ -81,15 +81,19 @@ redireciona para `/login` enquanto não houver sessão válida.
 
 **Papéis:**
 
-- `user` — participante: dá palpites e acompanha tudo.
-- `admin` — cadastra jogadores e vê tudo, mas **não dá palpites**.
+- `user` — participante: dá palpites (só por si mesmo) e acompanha tudo.
+- `admin` — cadastra participantes e vê tudo, mas **não dá palpites**.
 
-**Vínculo automático user ↔ player:** no primeiro login de um `user`, o sistema
-cria automaticamente o `player` correspondente no bolão (ou reaproveita um de
-mesmo nome, se o admin já tiver criado). A coluna `users.player_id` guarda esse
-vínculo, e em `/palpites` o jogador do usuário já vem pré-selecionado. A tela
-`/jogadores` lista participantes (logins) que ainda não têm jogador, para o admin
-adicionar rapidamente.
+**Cadastro de participantes (pela interface do admin):** em `/jogadores` o admin
+cadastra cada pessoa com **nome + celular + senha**. O sistema cria o **login**
+(`users`, role `user`) e o **jogador** (`players`) já vinculados via
+`users.player_id`. A pessoa entra com celular + senha e, em `/palpites`, já joga
+por si — **não há mais PIN** (cada palpite é amarrado ao login).
+
+- O backend garante que um `user` só palpita pelo **próprio** jogador.
+- No primeiro login, se o vínculo ainda não existir, o `player` é criado/associado
+  automaticamente (reaproveita um de mesmo nome, se houver).
+- `npm run seed:users` segue criando os usuários iniciais a partir do `.env`.
 
 **Credenciais NÃO ficam no repositório.** Defina-as em `backend/.env`
 (copie de `backend/.env.example`) e crie os usuários com `npm run seed:users`:

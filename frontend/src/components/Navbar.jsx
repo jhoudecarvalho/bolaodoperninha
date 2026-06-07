@@ -3,7 +3,7 @@ import { useAuth } from '../auth/AuthContext.jsx';
 
 const LINKS = [
   { to: '/', label: '🏠 Home', end: true },
-  { to: '/jogadores', label: '👥 Jogadores' },
+  { to: '/jogadores', label: '👥 Participantes' },
   { to: '/palpites', label: '🎯 Palpites' },
   { to: '/resultados', label: '📊 Resultados' },
   { to: '/ranking', label: '🏆 Ranking' },

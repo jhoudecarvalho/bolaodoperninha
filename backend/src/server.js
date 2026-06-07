@@ -7,6 +7,7 @@ import { startScoresSync } from './services/scoresFetcher.js';
 import { requireAuth } from './middleware/auth.js';
 
 import authRouter from './routes/auth.js';
+import usersRouter from './routes/users.js';
 import playersRouter from './routes/players.js';
 import matchesRouter from './routes/matches.js';
 import predictionsRouter from './routes/predictions.js';
@@ -34,6 +35,7 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/auth', authRouter);
 
 // Rotas protegidas — exigem Bearer token
+app.use('/api/users', requireAuth, usersRouter);
 app.use('/api/players', requireAuth, playersRouter);
 app.use('/api/matches', requireAuth, matchesRouter);
 app.use('/api/predictions', requireAuth, predictionsRouter);

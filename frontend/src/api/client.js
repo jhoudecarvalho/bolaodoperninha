@@ -63,6 +63,8 @@ export const PredictionsAPI = {
     api.get('/predictions', { params: { player_id } }).then((r) => r.data),
   byMatch: (match_id) =>
     api.get('/predictions', { params: { match_id } }).then((r) => r.data),
+  byGroup: (group) =>
+    api.get('/predictions', { params: { group } }).then((r) => r.data),
   save: (data) => api.post('/predictions', data).then((r) => r.data),
   saveBulk: (data) => api.post('/predictions/bulk', data).then((r) => r.data),
 };

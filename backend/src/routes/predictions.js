@@ -31,10 +31,10 @@ function ownPlayerOnly(req, res, next) {
   next();
 }
 
-// GET /api/predictions?player_id=1  |  ?match_id=5
+// GET /api/predictions?player_id=1  |  ?match_id=5  |  ?group=A
 router.get('/', async (req, res) => {
   try {
-    const { player_id, match_id } = req.query;
+    const { player_id, match_id, group } = req.query;
     const where = [];
     const params = [];
     if (player_id) {
@@ -44,6 +44,10 @@ router.get('/', async (req, res) => {
     if (match_id) {
       where.push('pr.match_id = ?');
       params.push(match_id);
+    }
+    if (group) {
+      where.push('m.group_id = ?');
+      params.push(group);
     }
 
     const sql = `
@@ -58,12 +62,13 @@ router.get('/', async (req, res) => {
     `;
     const [rows] = await pool.query(sql, params);
 
-    // Visão por jogo (sem filtro de jogador): oculta os placares enquanto o
+    // Visão pública (sem filtro de jogador): oculta os placares enquanto o
     // jogo não começou — assim ninguém vê o palpite alheio antes do apito.
-    const maskByMatch = Boolean(match_id) && !player_id;
+    // O nome de quem palpitou aparece sempre.
+    const maskScores = !player_id;
     const out = rows.map((r) => {
       const started = Boolean(Number(r.started));
-      const revealed = started || !maskByMatch;
+      const revealed = started || !maskScores;
       return {
         ...r,
         started,

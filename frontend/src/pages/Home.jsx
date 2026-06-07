@@ -92,7 +92,7 @@ export default function Home() {
                 match={m}
                 playerId={!isAdmin ? user?.player_id : null}
                 playerName={!isAdmin ? user?.name : ''}
-                showPredictions={isAdmin}
+                showPredictions
                 showQuickPredict={!isAdmin && !!user?.player_id}
                 onSaved={load}
               />

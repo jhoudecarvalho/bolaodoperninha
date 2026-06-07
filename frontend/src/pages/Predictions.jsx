@@ -16,12 +16,22 @@ export default function Predictions() {
   const [matches, setMatches] = useState([]);
   const [preds, setPreds] = useState({}); // match_id -> { home, away }
   const [saved, setSaved] = useState({}); // match_id -> { home, away } (no servidor)
+  const [predictors, setPredictors] = useState({}); // match_id -> [{ player_name, ... }]
   const [msg, setMsg] = useState(null);
   const [saving, setSaving] = useState(false);
+
+  // Quem já palpitou em cada jogo do grupo (nome sempre; placar só após o apito)
+  async function loadPredictors() {
+    const list = await PredictionsAPI.byGroup(group).catch(() => []);
+    const map = {};
+    for (const p of list) (map[p.match_id] ||= []).push(p);
+    setPredictors(map);
+  }
 
   // Carrega jogos do grupo
   useEffect(() => {
     MatchesAPI.list({ group }).then(setMatches);
+    loadPredictors();
   }, [group]);
 
   // Carrega palpites do jogador
@@ -81,6 +91,7 @@ export default function Predictions() {
       for (const p of fresh) map[p.match_id] = { home: p.home_score, away: p.away_score };
       setPreds(map);
       setSaved(map);
+      await loadPredictors();
       setMsg({ type: 'ok', text: `${toSave.length} palpite(s) salvos! ✓` });
     } catch (err) {
       setMsg({
@@ -219,6 +230,52 @@ export default function Predictions() {
                           ))}
                       </div>
                     )}
+
+                    {(() => {
+                      const who = predictors[m.id] || [];
+                      if (!who.length) {
+                        return (
+                          <p className="mt-3 border-t border-line pt-3 text-xs text-ink-dim">
+                            Ninguém palpitou neste jogo ainda.
+                          </p>
+                        );
+                      }
+                      return (
+                        <div className="mt-3 border-t border-line pt-3">
+                          <p className="mb-1.5 flex items-center justify-between text-xs text-ink-mut">
+                            <span>Já palpitaram ({who.length})</span>
+                            {!m.locked && (
+                              <span className="text-ink-dim">🔒 placares revelados no início</span>
+                            )}
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {who.map((w) => {
+                              const revealed = w.revealed !== false && w.home_score != null;
+                              return (
+                                <span
+                                  key={w.id}
+                                  className="badge bg-bg-900 text-ink"
+                                  title={w.player_name}
+                                >
+                                  <span
+                                    className="inline-block h-2 w-2 rounded-full"
+                                    style={{ backgroundColor: w.avatar_color || '#c8aa6e' }}
+                                  />
+                                  {w.player_name}
+                                  {revealed ? (
+                                    <b className="tabular-nums">
+                                      {w.home_score}×{w.away_score}
+                                    </b>
+                                  ) : (
+                                    <span className="text-ok">✔</span>
+                                  )}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })}

@@ -69,8 +69,6 @@ export const PredictionsAPI = {
 
 export const ResultsAPI = {
   list: () => api.get('/results').then((r) => r.data),
-  setManual: (match_id, data) =>
-    api.post(`/results/${match_id}`, data).then((r) => r.data),
   sync: () => api.post('/results/sync').then((r) => r.data),
 };
 

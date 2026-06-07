@@ -4,10 +4,6 @@ import { syncScores } from '../services/scoresFetcher.js';
 
 const router = Router();
 
-function validScore(v) {
-  return Number.isInteger(v) && v >= 0 && v <= 99;
-}
-
 // GET /api/results  → todos os jogos com resultado oficial
 router.get('/', async (_req, res) => {
   try {
@@ -37,35 +33,6 @@ router.post('/sync', async (_req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro ao sincronizar com a API' });
-  }
-});
-
-// POST /api/results/:match_id  { home_score, away_score }  → resultado manual (sobrescreve API)
-router.post('/:match_id', async (req, res) => {
-  try {
-    const home_score = Number(req.body?.home_score);
-    const away_score = Number(req.body?.away_score);
-
-    if (!validScore(home_score) || !validScore(away_score)) {
-      return res.status(400).json({ error: 'Placar inválido (use inteiros entre 0 e 99)' });
-    }
-
-    const [result] = await pool.query(
-      `UPDATE matches
-         SET home_score = ?, away_score = ?, status = 'finished',
-             result_source = 'manual', result_updated_at = UTC_TIMESTAMP()
-       WHERE id = ?`,
-      [home_score, away_score, req.params.match_id]
-    );
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: 'Jogo não encontrado' });
-    }
-
-    res.json({ ok: true, match_id: Number(req.params.match_id), home_score, away_score });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Erro ao salvar resultado manual' });
   }
 });
 

@@ -3,7 +3,7 @@ import { useAuth } from '../auth/AuthContext.jsx';
 
 const LINKS = [
   { to: '/', label: '🏠 Home', end: true },
-  { to: '/jogadores', label: '👥 Participantes' },
+  { to: '/jogadores', label: '👥 Participantes', adminOnly: true },
   { to: '/palpites', label: '🎯 Palpites' },
   { to: '/resultados', label: '📊 Resultados' },
   { to: '/ranking', label: '🏆 Ranking' },
@@ -13,6 +13,8 @@ const LINKS = [
 export default function Navbar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const isAdmin = user?.role === 'admin';
+  const links = LINKS.filter((l) => !l.adminOnly || isAdmin);
 
   function handleLogout() {
     logout();
@@ -27,7 +29,7 @@ export default function Navbar() {
           <span className="font-display text-lg font-bold text-gold">Bolão Copa 2026</span>
         </NavLink>
         <div className="flex flex-wrap gap-1">
-          {LINKS.map((l) => (
+          {links.map((l) => (
             <NavLink
               key={l.to}
               to={l.to}

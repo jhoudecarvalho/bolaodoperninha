@@ -10,7 +10,6 @@ export default function Results() {
   const isAdmin = user?.role === 'admin';
   const [group, setGroup] = useState('A');
   const [matches, setMatches] = useState([]);
-  const [edits, setEdits] = useState({}); // match_id -> { home, away }
   const [msg, setMsg] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncingMatches, setSyncingMatches] = useState(false);
@@ -18,29 +17,10 @@ export default function Results() {
   async function load() {
     const data = await MatchesAPI.list({ group });
     setMatches(data);
-    setEdits({});
   }
   useEffect(() => {
     load();
   }, [group]);
-
-  async function handleSave(matchId) {
-    const e = edits[matchId];
-    if (!e || e.home === '' || e.away === '') {
-      setMsg({ type: 'err', text: 'Preencha o placar.' });
-      return;
-    }
-    try {
-      await ResultsAPI.setManual(matchId, {
-        home_score: Number(e.home),
-        away_score: Number(e.away),
-      });
-      setMsg({ type: 'ok', text: 'Resultado salvo! ✓' });
-      await load();
-    } catch (err) {
-      setMsg({ type: 'err', text: err.response?.data?.error || 'Erro ao salvar' });
-    }
-  }
 
   async function handleSync() {
     setSyncing(true);
@@ -89,6 +69,10 @@ export default function Results() {
         </div>
       </div>
 
+      <p className="text-sm text-ink-mut">
+        Os placares são atualizados automaticamente pela API oficial.
+      </p>
+
       <div className="flex flex-wrap gap-2">
         {GROUPS.map((g) => (
           <button
@@ -110,23 +94,24 @@ export default function Results() {
       <div className="space-y-3">
         {matches.map((m) => {
           const hasResult = m.home_score != null && m.away_score != null;
-          const e = edits[m.id] || {};
           return (
             <div key={m.id} className="card p-4">
               <div className="mb-2 flex items-center justify-between text-xs text-ink-mut">
                 <span>{formatLocal(m.kick_off_utc)}</span>
-                {hasResult && (
+                {hasResult ? (
                   <span
                     className={`badge ${
-                      m.result_source === 'api' ? 'bg-api/20 text-api' : 'bg-gold/20 text-gold'
+                      m.result_source === 'manual' ? 'bg-gold/20 text-gold' : 'bg-api/20 text-api'
                     }`}
                   >
-                    {m.result_source === 'api' ? '📡 API' : '✍️ Manual'}
+                    {m.result_source === 'manual' ? '✍️ Manual' : '📡 API'}
                   </span>
+                ) : (
+                  <span className="badge bg-bg-800 text-ink-dim">⏳ A definir</span>
                 )}
               </div>
 
-              {/* Mobile: times em colunas, placar centralizado, botão embaixo */}
+              {/* Mobile: times em colunas, placar centralizado */}
               <div className="space-y-4 sm:hidden">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex min-w-0 flex-col items-center gap-1.5 text-center">
@@ -139,42 +124,14 @@ export default function Results() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-center gap-2">
-                  <input
-                    type="number"
-                    min="0"
-                    className="score-input"
-                    placeholder={hasResult ? m.home_score : '-'}
-                    value={e.home ?? ''}
-                    onChange={(ev) =>
-                      setEdits((p) => ({ ...p, [m.id]: { ...p[m.id], home: ev.target.value } }))
-                    }
-                  />
+                <div className="flex items-center justify-center gap-3 text-3xl font-bold">
+                  <span>{hasResult ? m.home_score : '–'}</span>
                   <span className="text-lg text-ink-dim">×</span>
-                  <input
-                    type="number"
-                    min="0"
-                    className="score-input"
-                    placeholder={hasResult ? m.away_score : '-'}
-                    value={e.away ?? ''}
-                    onChange={(ev) =>
-                      setEdits((p) => ({ ...p, [m.id]: { ...p[m.id], away: ev.target.value } }))
-                    }
-                  />
+                  <span>{hasResult ? m.away_score : '–'}</span>
                 </div>
-
-                {hasResult && (
-                  <p className="text-center text-sm text-gold">
-                    Placar oficial: {m.home_score} × {m.away_score}
-                  </p>
-                )}
-
-                <button className="btn-gold w-full" onClick={() => handleSave(m.id)}>
-                  💾 Salvar resultado
-                </button>
               </div>
 
-              {/* Desktop: layout horizontal original */}
+              {/* Desktop: layout horizontal */}
               <div className="hidden sm:block">
                 <div className="flex items-center gap-2">
                   <div className="flex flex-1 items-center justify-end gap-2 text-right">
@@ -182,45 +139,17 @@ export default function Results() {
                     <span className="text-2xl">{m.home_flag}</span>
                   </div>
 
-                  <div className="flex items-center gap-2 px-2">
-                    <input
-                      type="number"
-                      min="0"
-                      className="score-input"
-                      placeholder={hasResult ? m.home_score : '-'}
-                      value={e.home ?? ''}
-                      onChange={(ev) =>
-                        setEdits((p) => ({ ...p, [m.id]: { ...p[m.id], home: ev.target.value } }))
-                      }
-                    />
-                    <span className="text-ink-dim">×</span>
-                    <input
-                      type="number"
-                      min="0"
-                      className="score-input"
-                      placeholder={hasResult ? m.away_score : '-'}
-                      value={e.away ?? ''}
-                      onChange={(ev) =>
-                        setEdits((p) => ({ ...p, [m.id]: { ...p[m.id], away: ev.target.value } }))
-                      }
-                    />
+                  <div className="flex items-center gap-3 px-4 text-2xl font-bold">
+                    <span>{hasResult ? m.home_score : '–'}</span>
+                    <span className="text-base text-ink-dim">×</span>
+                    <span>{hasResult ? m.away_score : '–'}</span>
                   </div>
 
                   <div className="flex flex-1 items-center gap-2">
                     <span className="text-2xl">{m.away_flag}</span>
                     <span className="font-medium">{m.away_name}</span>
                   </div>
-
-                  <button className="btn-gold ml-2 shrink-0" onClick={() => handleSave(m.id)}>
-                    💾
-                  </button>
                 </div>
-
-                {hasResult && (
-                  <p className="mt-2 text-center text-sm text-gold">
-                    Placar oficial: {m.home_score} × {m.away_score}
-                  </p>
-                )}
               </div>
             </div>
           );

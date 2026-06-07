@@ -2,13 +2,13 @@ export default function LiveBanner({ matches = [] }) {
   if (!matches.length) return null;
 
   return (
-    <div className="card border-danger/40 bg-gradient-to-r from-[#2a0f12] to-bg-700 p-4 animate-fadeIn">
+    <div className="card border-ok/40 bg-gradient-to-r from-[#0f2a12] to-bg-700 p-4 animate-fadeIn">
       <div className="mb-3 flex items-center gap-2">
         <span className="relative flex h-3 w-3">
-          <span className="absolute inline-flex h-full w-full rounded-full bg-danger opacity-75 animate-pulseLive" />
-          <span className="relative inline-flex h-3 w-3 rounded-full bg-danger" />
+          <span className="absolute inline-flex h-full w-full rounded-full bg-ok opacity-75 animate-pulseLive" />
+          <span className="relative inline-flex h-3 w-3 rounded-full bg-ok" />
         </span>
-        <span className="font-display text-lg font-bold text-danger">AO VIVO</span>
+        <span className="font-display text-lg font-bold text-ok">AO VIVO</span>
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
         {matches.map((m) => (

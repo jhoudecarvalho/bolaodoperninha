@@ -13,14 +13,27 @@ export default function Results() {
   const [msg, setMsg] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncingMatches, setSyncingMatches] = useState(false);
+  const [acertadores, setAcertadores] = useState({});
 
   async function load() {
-    const data = await MatchesAPI.list({ group });
+    const [data, acc] = await Promise.all([
+      MatchesAPI.list({ group }),
+      ResultsAPI.acertadores(group),
+    ]);
     setMatches(data);
+    setAcertadores(acc);
   }
   useEffect(() => {
     load();
   }, [group]);
+
+  // Auto-refresh a cada 60s enquanto houver jogo ao vivo no grupo
+  useEffect(() => {
+    const hasLive = matches.some((m) => m.status === 'live');
+    if (!hasLive) return;
+    const timer = setInterval(load, 60_000);
+    return () => clearInterval(timer);
+  }, [matches, group]);
 
   async function handleSync() {
     setSyncing(true);
@@ -93,18 +106,21 @@ export default function Results() {
 
       <div className="space-y-3">
         {matches.map((m) => {
+          const isLive = m.status === 'live';
           const hasResult = m.home_score != null && m.away_score != null;
           return (
-            <div key={m.id} className="card p-4">
+            <div key={m.id} className={`card p-4 ${isLive ? 'border-ok/50' : ''}`}>
               <div className="mb-2 flex items-center justify-between text-xs text-ink-mut">
                 <span>{formatLocal(m.kick_off_utc)}</span>
-                {hasResult ? (
+                {isLive ? (
+                  <span className="badge animate-pulse bg-ok/20 text-ok">🟢 AO VIVO</span>
+                ) : hasResult ? (
                   <span
                     className={`badge ${
-                      m.result_source === 'manual' ? 'bg-gold/20 text-gold' : 'bg-api/20 text-api'
+                      m.result_source === 'manual' ? 'bg-gold/20 text-gold' : 'bg-danger/20 text-danger'
                     }`}
                   >
-                    {m.result_source === 'manual' ? '✍️ Manual' : '📡 API'}
+                    {m.result_source === 'manual' ? '✍️ Manual' : '🔴 ENCERRADO'}
                   </span>
                 ) : (
                   <span className="badge bg-bg-800 text-ink-dim">⏳ A definir</span>
@@ -124,7 +140,7 @@ export default function Results() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-center gap-3 text-3xl font-bold">
+                <div className={`flex items-center justify-center gap-3 text-3xl font-bold ${isLive ? 'text-ok' : ''}`}>
                   <span>{hasResult ? m.home_score : '–'}</span>
                   <span className="text-lg text-ink-dim">×</span>
                   <span>{hasResult ? m.away_score : '–'}</span>
@@ -139,7 +155,7 @@ export default function Results() {
                     <span className="text-2xl">{m.home_flag}</span>
                   </div>
 
-                  <div className="flex items-center gap-3 px-4 text-2xl font-bold">
+                  <div className={`flex items-center gap-3 px-4 text-2xl font-bold ${isLive ? 'text-ok' : ''}`}>
                     <span>{hasResult ? m.home_score : '–'}</span>
                     <span className="text-base text-ink-dim">×</span>
                     <span>{hasResult ? m.away_score : '–'}</span>
@@ -151,6 +167,37 @@ export default function Results() {
                   </div>
                 </div>
               </div>
+
+              {/* Acertadores / acertando agora */}
+              {hasResult && (() => {
+                const winners = acertadores[m.id] || [];
+                const label = isLive
+                  ? `🎯 Acertando agora (${winners.length}):`
+                  : `🎯 Acertaram (${winners.length}):`;
+                const empty = isLive
+                  ? 'Ninguém está acertando o placar parcial.'
+                  : 'Ninguém acertou o placar exato.';
+                return (
+                  <div className="mt-3 border-t border-line-light pt-3 text-sm">
+                    {winners.length > 0 ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`font-medium ${isLive ? 'text-ok' : 'text-ok'}`}>{label}</span>
+                        {winners.map((w) => (
+                          <span
+                            key={w.player_id}
+                            className="rounded-full px-2 py-0.5 text-xs font-medium text-bg-900"
+                            style={{ backgroundColor: w.avatar_color }}
+                          >
+                            {w.player_name}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-ink-mut">{empty}</span>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           );
         })}

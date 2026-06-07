@@ -4,26 +4,26 @@ services:
   mysql:
     image: mysql:8.0
     command: --default-authentication-plugin=mysql_native_password
+    restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: bolao_copa2026
       MYSQL_USER: bolao
       MYSQL_PASSWORD: bolao2026
-    ports:
-      - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./backend/src/seeds/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-pbolao2026", "-ubolao"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "bolao", "-pbolao2026"]
       interval: 5s
       timeout: 5s
       retries: 20
+    networks:
+      - bolao_net
 
   backend:
     build: ./backend
-    ports:
-      - "3001:3001"
+    restart: unless-stopped
     depends_on:
       mysql:
         condition: service_healthy
@@ -34,14 +34,32 @@ services:
       DB_PASSWORD: bolao2026
       DB_NAME: bolao_copa2026
       PORT: 3001
-      FRONTEND_URL: http://localhost:5173
+      NODE_ENV: production
+      JWT_SECRET: 31e5ea835cfd0c3528ad8f682ec5ae1e855e509346c2394bf26e9ec7b07205eb
+      JWT_EXPIRES: 30d
+      FRONTEND_URL: https://bolaodoperninha.cdwtech.com.br
+      SCORES_API_PRIMARY: https://worldcup26.ir/get/games
+      SCORES_API_FALLBACK: https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json
+      SCORES_SYNC_INTERVAL_MS: 120000
+    networks:
+      - bolao_net
 
   frontend:
     build: ./frontend
+    restart: unless-stopped
     ports:
-      - "5173:5173"
+      - "4080:80"
     depends_on:
       - backend
+    networks:
+      - bolao_net
+      - npm_default
+
+networks:
+  bolao_net:
+    driver: bridge
+  npm_default:
+    external: true
 
 volumes:
   mysql_data:

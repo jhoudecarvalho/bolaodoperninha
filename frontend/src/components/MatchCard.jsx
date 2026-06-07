@@ -7,10 +7,10 @@ import ScoreInput from './ScoreInput.jsx';
 function StatusBadge({ match }) {
   if (match.status === 'live') {
     return (
-      <span className="badge bg-danger/20 text-danger">
+      <span className="badge bg-ok/20 text-ok">
         <span className="relative flex h-2 w-2">
-          <span className="absolute inline-flex h-full w-full rounded-full bg-danger opacity-75 animate-pulseLive" />
-          <span className="relative inline-flex h-2 w-2 rounded-full bg-danger" />
+          <span className="absolute inline-flex h-full w-full rounded-full bg-ok opacity-75 animate-pulseLive" />
+          <span className="relative inline-flex h-2 w-2 rounded-full bg-ok" />
         </span>
         AO VIVO
       </span>

@@ -72,6 +72,8 @@ export const PredictionsAPI = {
 export const ResultsAPI = {
   list: () => api.get('/results').then((r) => r.data),
   sync: () => api.post('/results/sync').then((r) => r.data),
+  acertadores: (group) =>
+    api.get('/results/acertadores', { params: group ? { group } : {} }).then((r) => r.data),
 };
 
 export const RankingAPI = {

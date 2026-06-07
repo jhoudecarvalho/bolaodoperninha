@@ -45,7 +45,7 @@ export default function Home() {
       {/* Hero */}
       <section className="card p-6 text-center animate-fadeIn">
         <h1 className="font-display text-3xl font-black text-gold sm:text-4xl">
-          Bolão Copa do Mundo 2026
+          Bolão Grupo Perninha: Copa do Mundo 2026
         </h1>
         <p className="mt-2 text-ink-mut">
           Palpite nos 72 jogos da fase de grupos. Placar exato vale <b className="text-gold">3 pontos</b>.

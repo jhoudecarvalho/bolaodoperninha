@@ -40,7 +40,6 @@ export default function MatchCard({
   showPredictions = false,
   onSaved,
 }) {
-  const [open, setOpen] = useState(false);
   const [predictions, setPredictions] = useState([]);
   const [home, setHome] = useState('');
   const [away, setAway] = useState('');
@@ -52,16 +51,16 @@ export default function MatchCard({
   const hasResult = match.home_score != null && match.away_score != null;
   const today = isToday(match.kick_off_utc);
 
-  // Carrega palpites quando o card abre para palpitar OU quando deve exibi-los
+  // Carrega palpites de todos (admin) ou só quando o card precisa exibi-los
   useEffect(() => {
-    if (!open && !showPredictions) return;
+    if (!showPredictions) return;
     PredictionsAPI.byMatch(match.id).then(setPredictions).catch(() => {});
-  }, [open, showPredictions, match.id]);
+  }, [showPredictions, match.id]);
 
-  // Pré-preenche inputs com o palpite do jogador selecionado (via byPlayer,
+  // Pré-preenche inputs com o palpite do usuário logado (via byPlayer,
   // que sempre traz o placar — o byMatch oculta antes do início).
   useEffect(() => {
-    if (!open || !playerId) {
+    if (!showQuickPredict || !playerId) {
       setMyPred(null);
       setHome('');
       setAway('');
@@ -75,7 +74,7 @@ export default function MatchCard({
         setAway(mine ? mine.away_score : '');
       })
       .catch(() => {});
-  }, [open, playerId, match.id]);
+  }, [showQuickPredict, playerId, match.id]);
 
   async function handleSave() {
     if (!playerId) {
@@ -207,47 +206,36 @@ export default function MatchCard({
           {locked ? (
             <p className="text-center text-xs text-danger">🔒 Palpites encerrados para este jogo</p>
           ) : (
-            <>
-              <button
-                className="btn-ghost w-full text-sm"
-                onClick={() => setOpen((o) => !o)}
-              >
-                {open ? 'Fechar' : '🎯 Palpite'}
-              </button>
-
-              {open && (
-                <div className="mt-3 space-y-3 animate-fadeIn">
-                  {playerName && (
-                    <p className="text-center text-xs text-ink-mut">
-                      Palpite de <b className="text-ink">{playerName}</b>
-                    </p>
-                  )}
-
-                  {myPred && (
-                    <p className="text-xs text-ok">
-                      Palpite atual: {myPred.home_score} × {myPred.away_score} ✓
-                    </p>
-                  )}
-
-                  <div className="flex items-center justify-center gap-3">
-                    <ScoreInput home={home} away={away} onHome={setHome} onAway={setAway} />
-                    <button className="btn-gold" onClick={handleSave} disabled={saving}>
-                      {saving ? '...' : '💾'}
-                    </button>
-                  </div>
-
-                  {msg && (
-                    <p
-                      className={`text-center text-xs ${
-                        msg.type === 'ok' ? 'text-ok' : 'text-danger'
-                      }`}
-                    >
-                      {msg.text}
-                    </p>
-                  )}
-                </div>
+            <div className="space-y-3 animate-fadeIn">
+              {playerName && (
+                <p className="text-center text-xs text-ink-mut">
+                  Seu palpite — <b className="text-ink">{playerName}</b>
+                </p>
               )}
-            </>
+
+              {myPred && (
+                <p className="text-center text-xs text-ok">
+                  Palpite atual: {myPred.home_score} × {myPred.away_score} ✓
+                </p>
+              )}
+
+              <div className="flex items-center justify-center gap-3">
+                <ScoreInput home={home} away={away} onHome={setHome} onAway={setAway} />
+                <button className="btn-gold" onClick={handleSave} disabled={saving}>
+                  {saving ? '...' : '💾 Salvar'}
+                </button>
+              </div>
+
+              {msg && (
+                <p
+                  className={`text-center text-xs ${
+                    msg.type === 'ok' ? 'text-ok' : 'text-danger'
+                  }`}
+                >
+                  {msg.text}
+                </p>
+              )}
+            </div>
           )}
         </div>
       )}

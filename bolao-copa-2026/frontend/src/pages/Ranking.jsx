@@ -1,0 +1,45 @@
+import { useEffect, useState } from 'react';
+import { RankingAPI } from '../api/client.js';
+import RankingTable from '../components/RankingTable.jsx';
+
+export default function Ranking() {
+  const [rows, setRows] = useState([]);
+
+  async function load() {
+    setRows(await RankingAPI.list().catch(() => []));
+  }
+  useEffect(() => {
+    load();
+    const id = setInterval(load, 60000);
+    return () => clearInterval(id);
+  }, []);
+
+  const podium = rows.slice(0, 3);
+
+  return (
+    <div className="space-y-6">
+      <h1 className="font-display text-2xl font-bold">🏆 Ranking</h1>
+
+      {podium.length > 0 && (
+        <div className="grid grid-cols-3 gap-3">
+          {podium.map((r, i) => (
+            <div
+              key={r.player_id}
+              className={`card p-4 text-center ${
+                i === 0 ? 'order-2 border-gold/60 -translate-y-2' : i === 1 ? 'order-1' : 'order-3'
+              }`}
+            >
+              <div className="text-3xl">{['🥇', '🥈', '🥉'][i]}</div>
+              <div className="mt-1 font-bold text-gold">{r.player_name}</div>
+              <div className="text-2xl font-black tabular-nums">{r.pontos}</div>
+              <div className="text-xs text-ink-mut">{r.acertos_exatos} acertos</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <RankingTable rows={rows} />
+      <p className="text-center text-xs text-ink-dim">Atualiza automaticamente a cada 60s</p>
+    </div>
+  );
+}

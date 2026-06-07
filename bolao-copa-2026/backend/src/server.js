@@ -1,0 +1,64 @@
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+
+import { testConnection } from './config/database.js';
+import { startScoresSync } from './services/scoresFetcher.js';
+import { requireAuth } from './middleware/auth.js';
+
+import authRouter from './routes/auth.js';
+import playersRouter from './routes/players.js';
+import matchesRouter from './routes/matches.js';
+import predictionsRouter from './routes/predictions.js';
+import resultsRouter from './routes/results.js';
+import rankingRouter from './routes/ranking.js';
+
+dotenv.config();
+
+const app = express();
+const PORT = process.env.PORT || 3001;
+
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  })
+);
+app.use(express.json());
+
+// Health check (público)
+app.get('/api/health', (_req, res) => {
+  res.json({ status: 'ok', time: new Date().toISOString() });
+});
+
+// Auth (público)
+app.use('/api/auth', authRouter);
+
+// Rotas protegidas — exigem Bearer token
+app.use('/api/players', requireAuth, playersRouter);
+app.use('/api/matches', requireAuth, matchesRouter);
+app.use('/api/predictions', requireAuth, predictionsRouter);
+app.use('/api/results', requireAuth, resultsRouter);
+app.use('/api/ranking', requireAuth, rankingRouter);
+
+// 404
+app.use((req, res) => {
+  res.status(404).json({ error: 'Rota não encontrada' });
+});
+
+async function start() {
+  try {
+    await testConnection();
+  } catch (err) {
+    console.error('❌ Falha ao conectar no MySQL:', err.message);
+    process.exit(1);
+  }
+
+  app.listen(PORT, () => {
+    console.log(`🚀 Backend rodando em http://localhost:${PORT}`);
+  });
+
+  // Inicia sincronização periódica de placares
+  startScoresSync();
+}
+
+start();

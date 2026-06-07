@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-bg-900 text-ink font-sans;
+    background-image: radial-gradient(circle at 50% -10%, #15152e 0%, #090916 55%);
+    min-height: 100vh;
+  }
+  h1, h2, h3 {
+    @apply font-display;
+  }
+  /* inputs de placar */
+  input[type='number']::-webkit-inner-spin-button,
+  input[type='number']::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-line bg-gradient-to-b from-bg-800 to-bg-700;
+  }
+  .btn {
+    @apply rounded-lg px-4 py-2 font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+  .btn-gold {
+    @apply btn bg-gold text-bg-900 hover:bg-gold-dark;
+  }
+  .btn-ghost {
+    @apply btn border border-line-light text-ink hover:bg-bg-800;
+  }
+  .score-input {
+    @apply w-12 h-12 rounded-lg bg-bg-900 border border-line-light text-center text-xl font-bold text-ink
+           focus:outline-none focus:border-gold disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium;
+  }
+}

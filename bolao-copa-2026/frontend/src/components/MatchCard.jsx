@@ -1,0 +1,266 @@
+import { useEffect, useMemo, useState } from 'react';
+import { PredictionsAPI } from '../api/client.js';
+import { formatLocal, isToday } from '../utils/datetime.js';
+import CountdownTimer from './CountdownTimer.jsx';
+import ScoreInput from './ScoreInput.jsx';
+import PlayerSelector from './PlayerSelector.jsx';
+
+function StatusBadge({ match }) {
+  if (match.status === 'live') {
+    return (
+      <span className="badge bg-danger/20 text-danger">
+        <span className="relative flex h-2 w-2">
+          <span className="absolute inline-flex h-full w-full rounded-full bg-danger opacity-75 animate-pulseLive" />
+          <span className="relative inline-flex h-2 w-2 rounded-full bg-danger" />
+        </span>
+        AO VIVO
+      </span>
+    );
+  }
+  if (match.locked && match.status !== 'finished') {
+    return <span className="badge bg-danger/15 text-danger">🔒 BLOQUEADO</span>;
+  }
+  if (match.status === 'finished') {
+    return <span className="badge bg-ok-dark/30 text-ok">✓ ENCERRADO</span>;
+  }
+  return <span className="badge bg-ok-dark/20 text-ok">🟢 ABERTO</span>;
+}
+
+/**
+ * Card de jogo reutilizável.
+ *  - showQuickPredict: habilita o fluxo de palpite rápido inline (Home)
+ *  - showPredictions: exibe a lista de palpites já feitos para o jogo
+ *  - players: lista para seleção de jogador
+ *  - onSaved: callback após salvar
+ */
+export default function MatchCard({
+  match,
+  players = [],
+  showQuickPredict = false,
+  showPredictions = false,
+  onSaved,
+}) {
+  const [open, setOpen] = useState(false);
+  const [playerId, setPlayerId] = useState(players.length === 1 ? players[0].id : null);
+  const [predictions, setPredictions] = useState([]);
+  const [home, setHome] = useState('');
+  const [away, setAway] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  const locked = match.locked;
+  const hasResult = match.home_score != null && match.away_score != null;
+  const today = isToday(match.kick_off_utc);
+
+  const [myPred, setMyPred] = useState(null); // palpite do jogador selecionado (com placar)
+
+  const predictedIds = useMemo(
+    () => new Set(predictions.map((p) => p.player_id)),
+    [predictions]
+  );
+
+  // Carrega palpites quando o card abre para palpitar OU quando deve exibi-los
+  useEffect(() => {
+    if (!open && !showPredictions) return;
+    PredictionsAPI.byMatch(match.id).then(setPredictions).catch(() => {});
+  }, [open, showPredictions, match.id]);
+
+  // Pré-preenche inputs com o palpite do jogador selecionado (via byPlayer,
+  // que sempre traz o placar — o byMatch oculta antes do início).
+  useEffect(() => {
+    if (!open || !playerId) {
+      setMyPred(null);
+      setHome('');
+      setAway('');
+      return;
+    }
+    PredictionsAPI.byPlayer(playerId)
+      .then((list) => {
+        const mine = list.find((p) => p.match_id === match.id) || null;
+        setMyPred(mine);
+        setHome(mine ? mine.home_score : '');
+        setAway(mine ? mine.away_score : '');
+      })
+      .catch(() => {});
+  }, [open, playerId, match.id]);
+
+  async function handleSave() {
+    if (!playerId) {
+      setMsg({ type: 'err', text: 'Selecione um jogador' });
+      return;
+    }
+    if (home === '' || away === '') {
+      setMsg({ type: 'err', text: 'Preencha o placar' });
+      return;
+    }
+    setSaving(true);
+    setMsg(null);
+    try {
+      await PredictionsAPI.save({
+        player_id: playerId,
+        match_id: match.id,
+        home_score: Number(home),
+        away_score: Number(away),
+      });
+      setMsg({ type: 'ok', text: 'Palpite salvo! ✓' });
+      setMyPred({ match_id: match.id, home_score: Number(home), away_score: Number(away) });
+      const fresh = await PredictionsAPI.byMatch(match.id);
+      setPredictions(fresh);
+      onSaved?.();
+    } catch (err) {
+      setMsg({
+        type: 'err',
+        text: err.response?.data?.message || err.response?.data?.error || 'Erro ao salvar',
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const borderClass = locked
+    ? 'border-danger/40'
+    : today
+    ? 'border-gold/50'
+    : 'border-line';
+
+  return (
+    <div className={`card ${borderClass} p-4 animate-slideUp`}>
+      <div className="mb-2 flex items-center justify-between text-xs text-ink-mut">
+        <span>
+          Grupo {match.group_id} · {formatLocal(match.kick_off_utc)}
+          {today && <span className="ml-1 text-gold">· Hoje</span>}
+        </span>
+        <StatusBadge match={match} />
+      </div>
+
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-1 items-center gap-2">
+          <span className="text-2xl">{match.home_flag}</span>
+          <span className="font-medium">{match.home_name}</span>
+        </div>
+
+        <div className="px-3 text-center">
+          {hasResult ? (
+            <div className="font-display text-xl font-bold text-gold tabular-nums">
+              {match.home_score} × {match.away_score}
+            </div>
+          ) : (
+            <CountdownTimer kickoff={match.kick_off_utc} className="text-sm text-ink-mut" />
+          )}
+        </div>
+
+        <div className="flex flex-1 items-center justify-end gap-2">
+          <span className="font-medium">{match.away_name}</span>
+          <span className="text-2xl">{match.away_flag}</span>
+        </div>
+      </div>
+
+      {hasResult && match.result_source === 'api' && (
+        <div className="mt-2 text-right">
+          <span className="badge bg-api/20 text-api">📡 API</span>
+        </div>
+      )}
+
+      {showPredictions && (
+        <div className="mt-3 border-t border-line pt-3">
+          {predictions.length === 0 ? (
+            <p className="text-xs text-ink-dim">Nenhum palpite ainda para este jogo.</p>
+          ) : (
+            <>
+              <p className="mb-1.5 flex items-center justify-between text-xs text-ink-mut">
+                <span>Palpites ({predictions.length})</span>
+                {!locked && <span className="text-ink-dim">🔒 placares revelados no início</span>}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {predictions.map((p) => {
+                  const revealed = p.revealed !== false && p.home_score != null;
+                  const exact =
+                    revealed &&
+                    hasResult &&
+                    p.home_score === match.home_score &&
+                    p.away_score === match.away_score;
+                  return (
+                    <span
+                      key={p.id}
+                      className={`badge bg-bg-900 ${
+                        exact ? 'text-ok ring-1 ring-ok/40' : 'text-ink'
+                      }`}
+                      title={p.player_name}
+                    >
+                      <span
+                        className="inline-block h-2 w-2 rounded-full"
+                        style={{ backgroundColor: p.avatar_color || '#c8aa6e' }}
+                      />
+                      {p.player_name}
+                      {revealed ? (
+                        <b className="tabular-nums">
+                          {p.home_score}×{p.away_score}
+                        </b>
+                      ) : (
+                        <span className="text-ok">✔</span>
+                      )}
+                      {exact && '✓'}
+                    </span>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {showQuickPredict && (
+        <div className="mt-3 border-t border-line pt-3">
+          {locked ? (
+            <p className="text-center text-xs text-danger">🔒 Palpites encerrados para este jogo</p>
+          ) : (
+            <>
+              <button
+                className="btn-ghost w-full text-sm"
+                onClick={() => setOpen((o) => !o)}
+              >
+                {open ? 'Fechar' : '🎯 Palpite'}
+              </button>
+
+              {open && (
+                <div className="mt-3 space-y-3 animate-fadeIn">
+                  {players.length > 1 && (
+                    <PlayerSelector
+                      players={players}
+                      value={playerId}
+                      onChange={setPlayerId}
+                      predictedIds={predictedIds}
+                    />
+                  )}
+
+                  {myPred && (
+                    <p className="text-xs text-ok">
+                      Palpite atual: {myPred.home_score} × {myPred.away_score} ✓
+                    </p>
+                  )}
+
+                  <div className="flex items-center justify-center gap-3">
+                    <ScoreInput home={home} away={away} onHome={setHome} onAway={setAway} />
+                    <button className="btn-gold" onClick={handleSave} disabled={saving}>
+                      {saving ? '...' : '💾'}
+                    </button>
+                  </div>
+
+                  {msg && (
+                    <p
+                      className={`text-center text-xs ${
+                        msg.type === 'ok' ? 'text-ok' : 'text-danger'
+                      }`}
+                    >
+                      {msg.text}
+                    </p>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

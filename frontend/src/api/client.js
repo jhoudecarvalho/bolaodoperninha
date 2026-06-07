@@ -47,6 +47,7 @@ export const MatchesAPI = {
   upcoming: (limit = 10) =>
     api.get('/matches/upcoming', { params: { limit } }).then((r) => r.data),
   detail: (id) => api.get(`/matches/${id}`).then((r) => r.data),
+  sync: () => api.post('/matches/sync').then((r) => r.data),
 };
 
 export const PredictionsAPI = {

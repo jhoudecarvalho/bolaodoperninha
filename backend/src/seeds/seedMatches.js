@@ -1,4 +1,5 @@
 import pool from '../config/database.js';
+import { importMatches } from '../services/matchesImporter.js';
 
 /**
  * Seed completo: 12 grupos, 48 seleções e 72 jogos da fase de grupos.
@@ -190,23 +191,32 @@ async function seed() {
     }
     console.log(`✅ ${TEAMS.length} seleções`);
 
-    // Jogos
+    // Jogos — tenta importar da API (datas reais c/ fuso); fallback p/ lista local
     let count = 0;
-    for (const [group, home, away, kickoff] of MATCHES) {
-      const homeId = teamId[home];
-      const awayId = teamId[away];
-      if (!homeId || !awayId) {
-        throw new Error(`Time não encontrado: ${home} ou ${away}`);
+    try {
+      const res = await importMatches();
+      count = res.inserted + res.updated;
+      if (count < 60) throw new Error(`apenas ${count} jogos vieram da API`);
+      console.log(`✅ ${count} jogos (fonte: ${res.source})`);
+    } catch (apiErr) {
+      console.warn(`⚠️  API de jogos indisponível (${apiErr.message}). Usando lista local.`);
+      count = 0;
+      for (const [group, home, away, kickoff] of MATCHES) {
+        const homeId = teamId[home];
+        const awayId = teamId[away];
+        if (!homeId || !awayId) {
+          throw new Error(`Time não encontrado: ${home} ou ${away}`);
+        }
+        const matchDate = kickoff.split(' ')[0];
+        await conn.query(
+          `INSERT INTO matches (group_id, home_team_id, away_team_id, match_date, kick_off_utc, status)
+           VALUES (?, ?, ?, ?, ?, 'scheduled')`,
+          [group, homeId, awayId, matchDate, kickoff]
+        );
+        count++;
       }
-      const matchDate = kickoff.split(' ')[0];
-      await conn.query(
-        `INSERT INTO matches (group_id, home_team_id, away_team_id, match_date, kick_off_utc, status)
-         VALUES (?, ?, ?, ?, ?, 'scheduled')`,
-        [group, homeId, awayId, matchDate, kickoff]
-      );
-      count++;
+      console.log(`✅ ${count} jogos (fonte: local)`);
     }
-    console.log(`✅ ${count} jogos`);
 
     console.log('🎉 Seed concluído com sucesso!');
   } catch (err) {

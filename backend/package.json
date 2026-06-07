@@ -9,6 +9,7 @@
     "dev": "node --watch src/server.js",
     "seed": "node src/seeds/seedMatches.js",
     "seed:users": "node src/seeds/seedUsers.js",
+    "sync:matches": "node src/seeds/syncMatches.js",
     "migrate": "node src/seeds/migrate.js"
   },
   "dependencies": {

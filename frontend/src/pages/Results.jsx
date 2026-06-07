@@ -1,15 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import { MatchesAPI, ResultsAPI } from '../api/client.js';
+import { useAuth } from '../auth/AuthContext.jsx';
 import { formatLocal } from '../utils/datetime.js';
 
 const GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
 
 export default function Results() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [group, setGroup] = useState('A');
   const [matches, setMatches] = useState([]);
   const [edits, setEdits] = useState({}); // match_id -> { home, away }
   const [msg, setMsg] = useState(null);
   const [syncing, setSyncing] = useState(false);
+  const [syncingMatches, setSyncingMatches] = useState(false);
 
   async function load() {
     const data = await MatchesAPI.list({ group });
@@ -52,13 +56,37 @@ export default function Results() {
     }
   }
 
+  async function handleSyncMatches() {
+    setSyncingMatches(true);
+    setMsg(null);
+    try {
+      const r = await MatchesAPI.sync();
+      setMsg({
+        type: 'ok',
+        text: `Jogos atualizados da API: ${r.updated} atualizados, ${r.inserted} novos.`,
+      });
+      await load();
+    } catch {
+      setMsg({ type: 'err', text: 'Falha ao buscar os jogos na API.' });
+    } finally {
+      setSyncingMatches(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="font-display text-2xl font-bold">📊 Resultados</h1>
-        <button className="btn-ghost text-sm" onClick={handleSync} disabled={syncing}>
-          {syncing ? 'Sincronizando...' : '📡 Sincronizar API'}
-        </button>
+        <div className="flex gap-2">
+          {isAdmin && (
+            <button className="btn-ghost text-sm" onClick={handleSyncMatches} disabled={syncingMatches}>
+              {syncingMatches ? 'Atualizando...' : '🗓️ Atualizar jogos (API)'}
+            </button>
+          )}
+          <button className="btn-ghost text-sm" onClick={handleSync} disabled={syncing}>
+            {syncing ? 'Sincronizando...' : '📡 Sincronizar placares'}
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2">

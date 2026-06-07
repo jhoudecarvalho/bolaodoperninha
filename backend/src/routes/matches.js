@@ -1,7 +1,22 @@
 import { Router } from 'express';
 import pool from '../config/database.js';
+import { importMatches } from '../services/matchesImporter.js';
 
 const router = Router();
+
+// POST /api/matches/sync → reimporta os jogos da API (somente admin)
+router.post('/sync', async (req, res) => {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Apenas o administrador pode sincronizar jogos' });
+  }
+  try {
+    const result = await importMatches();
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: 'Falha ao buscar jogos na API' });
+  }
+});
 
 const BASE_SELECT = `
   SELECT

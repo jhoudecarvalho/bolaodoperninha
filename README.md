@@ -1,6 +1,6 @@
 # 🏆 Bolão Copa do Mundo 2026
 
-Sistema web completo de bolão da Copa do Mundo FIFA 2026. Até 15 participantes
+Sistema web completo de bolão da Copa do Mundo FIFA 2026. Participantes ilimitados
 palpitam nos 72 jogos da fase de grupos. Placar exato vale **3 pontos**. Palpites
 são bloqueados no apito inicial de cada jogo, os placares são buscados
 automaticamente via API e o ranking é calculado em tempo real.
@@ -9,8 +9,19 @@ automaticamente via API e o ranking é calculado em tempo real.
 
 - **Backend:** Node.js + Express (ESM) + MySQL 8 (`mysql2/promise`)
 - **Frontend:** React 18 + Vite + Tailwind CSS + React Router
-- **API de placares:** worldcup26.ir (primária) + openfootball/worldcup.json (fallback)
+- **Fonte dos jogos:** openfootball/worldcup.json (fixtures com fuso → UTC confiável)
+- **Fonte dos placares:** worldcup26.ir (primária) + openfootball (fallback)
 - **Tempo real:** sync de placares a cada 2 min no backend; polling de 60s no frontend
+
+## De onde vêm os dados
+
+- **Jogos (fixtures):** importados da API openfootball por `npm run seed` (ou
+  `npm run sync:matches`). Os times (nome em PT + bandeira) são locais, pois a API
+  só traz o nome em inglês. O import é **não-destrutivo** (atualiza data/horário/
+  estádio sem apagar jogos nem palpites). Admin também sincroniza pela tela
+  📊 Resultados → "🗓️ Atualizar jogos (API)".
+- **Placares:** buscados do worldcup26.ir a cada 2 min; resultado manual (admin)
+  tem prioridade e nunca é sobrescrito.
 
 ## Estrutura
 

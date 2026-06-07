@@ -22,7 +22,7 @@ router.post('/login', async (req, res) => {
     const digits = normalizePhone(identifier);
 
     const [[user]] = await pool.query(
-      `SELECT id, name, username, phone, password_hash, role, player_id
+      `SELECT id, name, username, phone, password_hash, role, player_id, device_fingerprint
        FROM users
        WHERE LOWER(username) = LOWER(?)
           OR (phone IS NOT NULL AND phone <> '' AND phone = ?)
@@ -37,6 +37,22 @@ router.post('/login', async (req, res) => {
     const ok = await bcrypt.compare(password, user.password_hash);
     if (!ok) {
       return res.status(401).json({ error: 'Usuário ou senha inválidos' });
+    }
+
+    // Verificação de dispositivo (apenas para participantes, não admin)
+    if (user.role !== 'admin') {
+      const fingerprint = String(req.body?.fingerprint || '').trim();
+      if (fingerprint) {
+        if (!user.device_fingerprint) {
+          // Primeiro login: registra o dispositivo
+          await pool.query('UPDATE users SET device_fingerprint = ? WHERE id = ?', [fingerprint, user.id]);
+        } else if (user.device_fingerprint !== fingerprint) {
+          return res.status(403).json({
+            error: 'Dispositivo não autorizado',
+            message: 'Este login está vinculado a outro dispositivo. Fale com o administrador para liberar o acesso.',
+          });
+        }
+      }
     }
 
     // Participante (role 'user') sem player vinculado → cria/vincula automaticamente.

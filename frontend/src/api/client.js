@@ -31,7 +31,8 @@ api.interceptors.response.use(
 export default api;
 
 export const AuthAPI = {
-  login: (phone, password) => api.post('/auth/login', { phone, password }).then((r) => r.data),
+  login: (phone, password, fingerprint) =>
+    api.post('/auth/login', { phone, password, fingerprint }).then((r) => r.data),
   me: () => api.get('/auth/me').then((r) => r.data),
 };
 
@@ -48,6 +49,7 @@ export const UsersAPI = {
   list: () => api.get('/users').then((r) => r.data),
   create: (data) => api.post('/users', data).then((r) => r.data),
   remove: (id) => api.delete(`/users/${id}`).then((r) => r.data),
+  resetDevice: (id) => api.delete(`/users/${id}/device`).then((r) => r.data),
 };
 
 export const MatchesAPI = {

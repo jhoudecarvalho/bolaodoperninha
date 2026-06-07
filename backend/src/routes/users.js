@@ -94,6 +94,19 @@ router.post('/', async (req, res) => {
   }
 });
 
+// DELETE /api/users/:id/device → reseta o fingerprint do dispositivo
+router.delete('/:id/device', async (req, res) => {
+  try {
+    const [[user]] = await pool.query('SELECT id, name FROM users WHERE id = ? AND role = ?', [req.params.id, 'user']);
+    if (!user) return res.status(404).json({ error: 'Participante não encontrado' });
+    await pool.query('UPDATE users SET device_fingerprint = NULL WHERE id = ?', [user.id]);
+    res.json({ ok: true, message: `Dispositivo de ${user.name} liberado.` });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao resetar dispositivo' });
+  }
+});
+
 // DELETE /api/users/:id → remove o participante (login + jogador + palpites)
 router.delete('/:id', async (req, res) => {
   const conn = await pool.getConnection();

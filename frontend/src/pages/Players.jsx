@@ -48,6 +48,16 @@ export default function Players() {
     await load();
   }
 
+  async function handleResetDevice(id, pname) {
+    if (!confirm(`Liberar dispositivo de ${pname}? O próximo login dela será registrado como o novo dispositivo.`)) return;
+    try {
+      await UsersAPI.resetDevice(id);
+      setOk(`Dispositivo de ${pname} liberado com sucesso.`);
+    } catch {
+      setError('Erro ao liberar dispositivo.');
+    }
+  }
+
   if (!isAdmin) {
     return (
       <div className="space-y-6">
@@ -126,13 +136,22 @@ export default function Players() {
                 <div className="text-xs text-ink-mut">{formatPhoneBR(p.phone)}</div>
               </div>
             </div>
-            <button
-              onClick={() => handleRemove(p.id, p.name)}
-              className="text-danger hover:text-danger-bright"
-              title="Remover"
-            >
-              🗑
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleResetDevice(p.id, p.name)}
+                className="text-xs text-ink-mut hover:text-gold"
+                title="Liberar dispositivo"
+              >
+                📱
+              </button>
+              <button
+                onClick={() => handleRemove(p.id, p.name)}
+                className="text-danger hover:text-danger-bright"
+                title="Remover"
+              >
+                🗑
+              </button>
+            </div>
           </div>
         ))}
         {!participants.length && <p className="text-ink-mut">Nenhum participante cadastrado.</p>}

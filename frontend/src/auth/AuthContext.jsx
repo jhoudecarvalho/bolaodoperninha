@@ -1,5 +1,16 @@
 import { createContext, useContext, useEffect, useState } from 'react';
+import FingerprintJS from '@fingerprintjs/fingerprintjs';
 import { AuthAPI, TOKEN_KEY } from '../api/client.js';
+
+async function getFingerprint() {
+  try {
+    const fp = await FingerprintJS.load();
+    const result = await fp.get();
+    return result.visitorId;
+  } catch {
+    return null;
+  }
+}
 
 const AuthContext = createContext(null);
 
@@ -24,7 +35,8 @@ export function AuthProvider({ children }) {
   }, []);
 
   async function login(phone, password) {
-    const data = await AuthAPI.login(phone, password);
+    const fingerprint = await getFingerprint();
+    const data = await AuthAPI.login(phone, password, fingerprint);
     localStorage.setItem(TOKEN_KEY, data.token);
     setUser(data.user);
     return data.user;

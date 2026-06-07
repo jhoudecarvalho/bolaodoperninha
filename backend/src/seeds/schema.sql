@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash VARCHAR(100) NOT NULL,
   role ENUM('admin','user') NOT NULL DEFAULT 'user',
   player_id INT DEFAULT NULL,                 -- vínculo com o participante (bolão)
+  device_fingerprint VARCHAR(64) DEFAULT NULL, -- fingerprint do dispositivo autorizado
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 
   CONSTRAINT fk_users_player

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { MatchesAPI, ResultsAPI } from '../api/client.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import { formatLocal } from '../utils/datetime.js';
@@ -126,13 +126,20 @@ export default function Results() {
                 )}
               </div>
 
-              <div className="flex items-center gap-2">
-                <div className="flex flex-1 items-center justify-end gap-2 text-right">
-                  <span className="font-medium">{m.home_name}</span>
-                  <span className="text-2xl">{m.home_flag}</span>
+              {/* Mobile: times em colunas, placar centralizado, botão embaixo */}
+              <div className="space-y-4 sm:hidden">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex min-w-0 flex-col items-center gap-1.5 text-center">
+                    <span className="text-3xl leading-none">{m.home_flag}</span>
+                    <span className="font-medium leading-snug">{m.home_name}</span>
+                  </div>
+                  <div className="flex min-w-0 flex-col items-center gap-1.5 text-center">
+                    <span className="text-3xl leading-none">{m.away_flag}</span>
+                    <span className="font-medium leading-snug">{m.away_name}</span>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2 px-2">
+                <div className="flex items-center justify-center gap-2">
                   <input
                     type="number"
                     min="0"
@@ -143,7 +150,7 @@ export default function Results() {
                       setEdits((p) => ({ ...p, [m.id]: { ...p[m.id], home: ev.target.value } }))
                     }
                   />
-                  <span className="text-ink-dim">×</span>
+                  <span className="text-lg text-ink-dim">×</span>
                   <input
                     type="number"
                     min="0"
@@ -156,21 +163,65 @@ export default function Results() {
                   />
                 </div>
 
-                <div className="flex flex-1 items-center gap-2">
-                  <span className="text-2xl">{m.away_flag}</span>
-                  <span className="font-medium">{m.away_name}</span>
-                </div>
+                {hasResult && (
+                  <p className="text-center text-sm text-gold">
+                    Placar oficial: {m.home_score} × {m.away_score}
+                  </p>
+                )}
 
-                <button className="btn-gold ml-2" onClick={() => handleSave(m.id)}>
-                  💾
+                <button className="btn-gold w-full" onClick={() => handleSave(m.id)}>
+                  💾 Salvar resultado
                 </button>
               </div>
 
-              {hasResult && (
-                <p className="mt-2 text-center text-sm text-gold">
-                  Placar oficial: {m.home_score} × {m.away_score}
-                </p>
-              )}
+              {/* Desktop: layout horizontal original */}
+              <div className="hidden sm:block">
+                <div className="flex items-center gap-2">
+                  <div className="flex flex-1 items-center justify-end gap-2 text-right">
+                    <span className="font-medium">{m.home_name}</span>
+                    <span className="text-2xl">{m.home_flag}</span>
+                  </div>
+
+                  <div className="flex items-center gap-2 px-2">
+                    <input
+                      type="number"
+                      min="0"
+                      className="score-input"
+                      placeholder={hasResult ? m.home_score : '-'}
+                      value={e.home ?? ''}
+                      onChange={(ev) =>
+                        setEdits((p) => ({ ...p, [m.id]: { ...p[m.id], home: ev.target.value } }))
+                      }
+                    />
+                    <span className="text-ink-dim">×</span>
+                    <input
+                      type="number"
+                      min="0"
+                      className="score-input"
+                      placeholder={hasResult ? m.away_score : '-'}
+                      value={e.away ?? ''}
+                      onChange={(ev) =>
+                        setEdits((p) => ({ ...p, [m.id]: { ...p[m.id], away: ev.target.value } }))
+                      }
+                    />
+                  </div>
+
+                  <div className="flex flex-1 items-center gap-2">
+                    <span className="text-2xl">{m.away_flag}</span>
+                    <span className="font-medium">{m.away_name}</span>
+                  </div>
+
+                  <button className="btn-gold ml-2 shrink-0" onClick={() => handleSave(m.id)}>
+                    💾
+                  </button>
+                </div>
+
+                {hasResult && (
+                  <p className="mt-2 text-center text-sm text-gold">
+                    Placar oficial: {m.home_score} × {m.away_score}
+                  </p>
+                )}
+              </div>
             </div>
           );
         })}

@@ -3,26 +3,16 @@ CREATE DATABASE IF NOT EXISTS bolao_copa2026
 
 USE bolao_copa2026;
 
--- Recriar do zero (ordem respeita FKs)
+-- Recriar do zero (ordem respeita FKs). A tabela `users` referencia `players`,
+-- então desabilitamos a checagem de FK durante os DROPs.
+SET FOREIGN_KEY_CHECKS = 0;
 DROP VIEW  IF EXISTS ranking_view;
 DROP TABLE IF EXISTS predictions;
 DROP TABLE IF EXISTS matches;
 DROP TABLE IF EXISTS teams;
 DROP TABLE IF EXISTS players;
 DROP TABLE IF EXISTS `groups`;
-
--- ==========================================
--- TABELA: users (acesso ao sistema / login)
--- ==========================================
-CREATE TABLE IF NOT EXISTS users (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  name VARCHAR(60) NOT NULL,
-  username VARCHAR(40) DEFAULT NULL UNIQUE,   -- login alternativo (ex.: 'Admin')
-  phone VARCHAR(20) DEFAULT NULL UNIQUE,      -- apenas dígitos (normalizado)
-  password_hash VARCHAR(100) NOT NULL,
-  role ENUM('admin','user') NOT NULL DEFAULT 'user',
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
+SET FOREIGN_KEY_CHECKS = 1;
 
 -- ==========================================
 -- TABELA: groups (12 grupos, A-L)
@@ -82,6 +72,24 @@ CREATE TABLE players (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 
   INDEX idx_name (name)
+);
+
+-- ==========================================
+-- TABELA: users (acesso ao sistema / login)
+-- Criada após `players` por causa da FK player_id.
+-- ==========================================
+CREATE TABLE IF NOT EXISTS users (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(60) NOT NULL,
+  username VARCHAR(40) DEFAULT NULL UNIQUE,   -- login alternativo (ex.: 'Admin')
+  phone VARCHAR(20) DEFAULT NULL UNIQUE,      -- apenas dígitos (normalizado)
+  password_hash VARCHAR(100) NOT NULL,
+  role ENUM('admin','user') NOT NULL DEFAULT 'user',
+  player_id INT DEFAULT NULL,                 -- vínculo com o participante (bolão)
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+  CONSTRAINT fk_users_player
+    FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE SET NULL
 );
 
 -- ==========================================

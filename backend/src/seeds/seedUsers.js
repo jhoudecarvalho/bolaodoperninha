@@ -54,7 +54,10 @@ async function seedUsers() {
         phone VARCHAR(20) DEFAULT NULL UNIQUE,
         password_hash VARCHAR(100) NOT NULL,
         role ENUM('admin','user') NOT NULL DEFAULT 'user',
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        player_id INT DEFAULT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT fk_users_player
+          FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE SET NULL
       )
     `);
 

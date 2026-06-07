@@ -3,13 +3,19 @@ import { PlayersAPI } from '../api/client.js';
 
 export default function Players() {
   const [players, setPlayers] = useState([]);
+  const [suggestions, setSuggestions] = useState([]);
   const [name, setName] = useState('');
   const [pin, setPin] = useState('');
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
   async function load() {
-    setPlayers(await PlayersAPI.list().catch(() => []));
+    const [pl, sg] = await Promise.all([
+      PlayersAPI.list().catch(() => []),
+      PlayersAPI.suggestions().catch(() => []),
+    ]);
+    setPlayers(pl);
+    setSuggestions(sg);
   }
   useEffect(() => {
     load();
@@ -28,6 +34,16 @@ export default function Players() {
       setError(err.response?.data?.error || 'Erro ao cadastrar');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleAddByName(pname) {
+    setError(null);
+    try {
+      await PlayersAPI.create({ name: pname });
+      await load();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Erro ao cadastrar');
     }
   }
 
@@ -69,6 +85,26 @@ export default function Players() {
       </form>
 
       {error && <p className="text-sm text-danger">{error}</p>}
+
+      {suggestions.length > 0 && (
+        <div className="card p-4">
+          <p className="mb-2 text-xs text-ink-mut">
+            Participantes cadastrados (login) ainda sem jogador no bolão:
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {suggestions.map((s) => (
+              <button
+                key={s.id}
+                className="btn border border-line-light px-3 py-1 text-sm hover:bg-bg-800"
+                onClick={() => handleAddByName(s.name)}
+              >
+                + {s.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <p className="text-sm text-ink-mut">
         {players.length} {players.length === 1 ? 'jogador' : 'jogadores'} cadastrado
         {players.length === 1 ? '' : 's'}

@@ -84,6 +84,13 @@ redireciona para `/login` enquanto não houver sessão válida.
 - `user` — participante: dá palpites e acompanha tudo.
 - `admin` — cadastra jogadores e vê tudo, mas **não dá palpites**.
 
+**Vínculo automático user ↔ player:** no primeiro login de um `user`, o sistema
+cria automaticamente o `player` correspondente no bolão (ou reaproveita um de
+mesmo nome, se o admin já tiver criado). A coluna `users.player_id` guarda esse
+vínculo, e em `/palpites` o jogador do usuário já vem pré-selecionado. A tela
+`/jogadores` lista participantes (logins) que ainda não têm jogador, para o admin
+adicionar rapidamente.
+
 **Credenciais NÃO ficam no repositório.** Defina-as em `backend/.env`
 (copie de `backend/.env.example`) e crie os usuários com `npm run seed:users`:
 

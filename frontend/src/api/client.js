@@ -38,6 +38,7 @@ export const AuthAPI = {
 // Helpers de domínio
 export const PlayersAPI = {
   list: () => api.get('/players').then((r) => r.data),
+  suggestions: () => api.get('/players/suggestions').then((r) => r.data),
   create: (data) => api.post('/players', data).then((r) => r.data),
   remove: (id) => api.delete(`/players/${id}`).then((r) => r.data),
 };

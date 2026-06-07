@@ -22,7 +22,7 @@ router.post('/login', async (req, res) => {
     const digits = normalizePhone(identifier);
 
     const [[user]] = await pool.query(
-      `SELECT id, name, username, phone, password_hash, role
+      `SELECT id, name, username, phone, password_hash, role, player_id
        FROM users
        WHERE LOWER(username) = LOWER(?)
           OR (phone IS NOT NULL AND phone <> '' AND phone = ?)
@@ -39,12 +39,19 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Usuário ou senha inválidos' });
     }
 
+    // Participante (role 'user') sem player vinculado → cria/vincula automaticamente.
+    // O admin nunca vira player.
+    if (user.role === 'user' && !user.player_id) {
+      await linkOrCreatePlayer(user);
+    }
+
     const safeUser = {
       id: user.id,
       name: user.name,
       username: user.username,
       phone: user.phone,
       role: user.role,
+      player_id: user.player_id ?? null,
     };
     const token = signToken(safeUser);
 
@@ -69,8 +76,44 @@ router.get('/me', requireAuth, (req, res) => {
       username: req.user.username,
       phone: req.user.phone,
       role: req.user.role,
+      player_id: req.user.player_id ?? null,
     },
   });
 });
+
+const PLAYER_COLORS = [
+  '#c8aa6e', '#e74c3c', '#3498db', '#5cb85c', '#9b59b6',
+  '#e67e22', '#1abc9c', '#f1c40f', '#ff6b9d', '#34d399',
+  '#60a5fa', '#f87171', '#a78bfa', '#fbbf24', '#2dd4bf',
+];
+
+/**
+ * Garante um `player` vinculado ao `user` (role 'user'):
+ *  - reaproveita um player de mesmo nome (caso o admin já tenha criado), ou
+ *  - cria um novo.
+ * Atualiza users.player_id e o objeto `user` em memória.
+ */
+async function linkOrCreatePlayer(user) {
+  const [[existing]] = await pool.query(
+    'SELECT id FROM players WHERE LOWER(name) = LOWER(?) LIMIT 1',
+    [user.name]
+  );
+
+  let playerId;
+  if (existing) {
+    playerId = existing.id;
+  } else {
+    const [[{ total }]] = await pool.query('SELECT COUNT(*) AS total FROM players');
+    const color = PLAYER_COLORS[total % PLAYER_COLORS.length];
+    const [ins] = await pool.query(
+      'INSERT INTO players (name, avatar_color) VALUES (?, ?)',
+      [user.name, color]
+    );
+    playerId = ins.insertId;
+  }
+
+  await pool.query('UPDATE users SET player_id = ? WHERE id = ?', [playerId, user.id]);
+  user.player_id = playerId;
+}
 
 export default router;

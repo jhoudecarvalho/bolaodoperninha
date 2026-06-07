@@ -20,13 +20,17 @@ export default function Predictions() {
   const [msg, setMsg] = useState(null);
   const [saving, setSaving] = useState(false);
 
-  // Carrega jogadores
+  // Carrega jogadores e pré-seleciona o player vinculado ao usuário logado
   useEffect(() => {
     PlayersAPI.list().then((pl) => {
       setPlayers(pl);
-      if (pl.length === 1) setPlayerId(pl[0].id);
+      if (user?.player_id && pl.some((p) => p.id === user.player_id)) {
+        setPlayerId(user.player_id);
+      } else if (pl.length === 1) {
+        setPlayerId(pl[0].id);
+      }
     });
-  }, []);
+  }, [user?.player_id]);
 
   // Carrega jogos do grupo
   useEffect(() => {

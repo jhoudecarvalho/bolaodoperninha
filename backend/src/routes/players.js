@@ -10,6 +10,20 @@ const COLORS = [
   '#60a5fa', '#f87171', '#a78bfa', '#fbbf24', '#2dd4bf',
 ];
 
+// GET /api/players/suggestions
+// Participantes (users role 'user') ainda sem player vinculado.
+router.get('/suggestions', async (_req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT id, name FROM users WHERE role = 'user' AND player_id IS NULL ORDER BY name`
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao buscar sugestões' });
+  }
+});
+
 // GET /api/players
 router.get('/', async (_req, res) => {
   try {

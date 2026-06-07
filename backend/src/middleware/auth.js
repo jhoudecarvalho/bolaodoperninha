@@ -10,6 +10,7 @@ export function signToken(user) {
       username: user.username,
       phone: user.phone,
       role: user.role,
+      player_id: user.player_id ?? null,
     },
     SECRET,
     { expiresIn: process.env.JWT_EXPIRES || '30d' }

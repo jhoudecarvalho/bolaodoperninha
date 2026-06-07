@@ -15,7 +15,7 @@ automaticamente via API e o ranking é calculado em tempo real.
 ## Estrutura
 
 ```
-bolao-copa-2026/
+.
 ├── backend/    # API Express + MySQL
 ├── frontend/   # SPA React/Vite
 └── docker-compose.yml

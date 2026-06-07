@@ -22,7 +22,7 @@ function StatusBadge({ match }) {
   if (match.status === 'finished') {
     return <span className="badge bg-ok-dark/30 text-ok">✓ ENCERRADO</span>;
   }
-  return <span className="badge bg-ok-dark/20 text-ok">🟢 ABERTO</span>;
+  return <span className="badge bg-ok-dark/20 text-ok">🟢 ABERTO PALPITE</span>;
 }
 
 /**

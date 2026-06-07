@@ -23,6 +23,7 @@ const TEAM_MAP = {
   "Cote d'Ivoire": 'Ivory Coast',
   'Congo DR': 'DR Congo',
   'DR Congo': 'DR Congo',
+  'Democratic Republic of the Congo': 'DR Congo',
   'Cabo Verde': 'Cape Verde',
   'Cape Verde Islands': 'Cape Verde',
   Czech: 'Czechia',
@@ -69,22 +70,32 @@ function parsePrimary(data) {
   const out = [];
   for (const g of games) {
     const home = normalizeName(
-      g.home || g.home_team || g.team1 || g.homeTeam?.name || g.teams?.home?.name
+      g.home_team_name_en || g.home || g.home_team || g.team1 || g.homeTeam?.name || g.teams?.home?.name
     );
     const away = normalizeName(
-      g.away || g.away_team || g.team2 || g.awayTeam?.name || g.teams?.away?.name
+      g.away_team_name_en || g.away || g.away_team || g.team2 || g.awayTeam?.name || g.teams?.away?.name
     );
     if (!home || !away) continue;
 
-    const hs = pickScore(g.home_score, g.homeScore, g.score?.home, g.goals?.home, g.score1);
-    const as = pickScore(g.away_score, g.awayScore, g.score?.away, g.goals?.away, g.score2);
-
+    // worldcup26.ir traz home_score="0" mesmo para jogos não iniciados.
+    // Só consideramos o placar quando o jogo realmente começou.
+    const elapsed = String(g.time_elapsed || '').toLowerCase();
     const statusStr = String(g.status || g.state || '').toLowerCase();
+    const finishedFlag = String(g.finished ?? '').toUpperCase() === 'TRUE' || g.finished === true;
     const finished =
+      finishedFlag ||
       statusStr.includes('finish') ||
       statusStr.includes('ft') ||
-      statusStr.includes('ended') ||
-      g.finished === true;
+      statusStr.includes('ended');
+
+    const hasScore = finished || (!!elapsed && elapsed !== 'notstarted') || statusStr.includes('live');
+
+    const hs = hasScore
+      ? pickScore(g.home_score, g.homeScore, g.score?.home, g.goals?.home, g.score1)
+      : null;
+    const as = hasScore
+      ? pickScore(g.away_score, g.awayScore, g.score?.away, g.goals?.away, g.score2)
+      : null;
 
     out.push({ home, away, homeScore: hs, awayScore: as, finished });
   }
@@ -214,6 +225,43 @@ export async function syncScores() {
 
   console.log(`✅ Sincronização concluída (${source}): ${updated} resultados atualizados`);
   return { updated, source };
+}
+
+// ── Sync de placares disparado no login (em segundo plano) ───────────────────
+let _syncingScores = false;
+let _lastScoresMs = 0;
+
+function envInt(name, def) {
+  const v = process.env[name];
+  if (v === undefined || v === '') return def;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : def;
+}
+
+/**
+ * Atualiza os placares a cada login (em segundo plano).
+ *  - trava contra execuções simultâneas;
+ *  - throttle configurável (SCORES_LOGIN_SYNC_MIN_MS; 0 = sempre).
+ * Nunca lança: erros só são logados (não pode quebrar o login).
+ */
+export async function syncScoresOnLogin() {
+  const minInterval = envInt('SCORES_LOGIN_SYNC_MIN_MS', 0);
+  const now = Date.now();
+
+  if (_syncingScores) return { skipped: 'em andamento' };
+  if (minInterval > 0 && now - _lastScoresMs < minInterval) return { skipped: 'throttled' };
+
+  _syncingScores = true;
+  try {
+    const res = await syncScores();
+    _lastScoresMs = Date.now();
+    return res;
+  } catch (err) {
+    console.warn('⚠️  Sync de placares no login falhou:', err.message);
+    return { error: err.message };
+  } finally {
+    _syncingScores = false;
+  }
 }
 
 let interval = null;

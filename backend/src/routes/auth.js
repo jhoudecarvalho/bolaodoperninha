@@ -4,6 +4,7 @@ import pool from '../config/database.js';
 import { signToken, requireAuth } from '../middleware/auth.js';
 import { normalizePhone } from '../utils/phone.js';
 import { syncMatchesOnLogin } from '../services/matchesImporter.js';
+import { syncScoresOnLogin } from '../services/scoresFetcher.js';
 
 const router = Router();
 
@@ -47,8 +48,10 @@ router.post('/login', async (req, res) => {
     };
     const token = signToken(safeUser);
 
-    // Dispara a atualização dos jogos em segundo plano (não bloqueia o login).
+    // Dispara, em segundo plano, a atualização dos jogos e dos placares
+    // (não bloqueia o login).
     syncMatchesOnLogin().catch(() => {});
+    syncScoresOnLogin().catch(() => {});
 
     res.json({ token, user: safeUser });
   } catch (err) {

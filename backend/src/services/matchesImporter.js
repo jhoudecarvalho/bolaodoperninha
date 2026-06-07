@@ -134,18 +134,26 @@ export async function importMatches() {
 let _syncing = false;
 let _lastSyncMs = 0;
 
+// Lê inteiro do ambiente respeitando 0 (que é "falsy" em JS).
+function envInt(name, def) {
+  const v = process.env[name];
+  if (v === undefined || v === '') return def;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : def;
+}
+
 /**
  * Versão protegida para ser chamada a cada login:
  *  - não roda dois imports ao mesmo tempo (trava);
- *  - coalesce chamadas muito próximas (throttle, padrão 60s).
+ *  - coalesce chamadas muito próximas (throttle; 0 = sempre).
  * Nunca lança: erros são apenas logados (não pode quebrar o login).
  */
 export async function syncMatchesOnLogin() {
-  const minInterval = Number(process.env.FIXTURES_LOGIN_SYNC_MIN_MS) || 60000;
+  const minInterval = envInt('FIXTURES_LOGIN_SYNC_MIN_MS', 60000);
   const now = Date.now();
 
   if (_syncing) return { skipped: 'em andamento' };
-  if (now - _lastSyncMs < minInterval) return { skipped: 'throttled' };
+  if (minInterval > 0 && now - _lastSyncMs < minInterval) return { skipped: 'throttled' };
 
   _syncing = true;
   try {

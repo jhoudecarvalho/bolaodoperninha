@@ -20,6 +20,10 @@ automaticamente via API e o ranking é calculado em tempo real.
   só traz o nome em inglês. O import é **não-destrutivo** (atualiza data/horário/
   estádio sem apagar jogos nem palpites). Admin também sincroniza pela tela
   📊 Resultados → "🗓️ Atualizar jogos (API)".
+- **Sync automático no login:** a cada login (de qualquer usuário) os jogos são
+  atualizados em segundo plano — o login não espera a API. Há trava contra syncs
+  simultâneos e um intervalo mínimo (`FIXTURES_LOGIN_SYNC_MIN_MS`, padrão 60s)
+  que coalesce logins próximos.
 - **Placares:** buscados do worldcup26.ir a cada 2 min; resultado manual (admin)
   tem prioridade e nunca é sobrescrito.
 

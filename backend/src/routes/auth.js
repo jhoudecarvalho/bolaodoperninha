@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import pool from '../config/database.js';
 import { signToken, requireAuth } from '../middleware/auth.js';
 import { normalizePhone } from '../utils/phone.js';
+import { syncMatchesOnLogin } from '../services/matchesImporter.js';
 
 const router = Router();
 
@@ -45,6 +46,10 @@ router.post('/login', async (req, res) => {
       role: user.role,
     };
     const token = signToken(safeUser);
+
+    // Dispara a atualização dos jogos em segundo plano (não bloqueia o login).
+    syncMatchesOnLogin().catch(() => {});
+
     res.json({ token, user: safeUser });
   } catch (err) {
     console.error(err);

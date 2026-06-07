@@ -129,3 +129,33 @@ export async function importMatches() {
   );
   return result;
 }
+
+// ── Sync disparado no login (em segundo plano) ───────────────────────────────
+let _syncing = false;
+let _lastSyncMs = 0;
+
+/**
+ * Versão protegida para ser chamada a cada login:
+ *  - não roda dois imports ao mesmo tempo (trava);
+ *  - coalesce chamadas muito próximas (throttle, padrão 60s).
+ * Nunca lança: erros são apenas logados (não pode quebrar o login).
+ */
+export async function syncMatchesOnLogin() {
+  const minInterval = Number(process.env.FIXTURES_LOGIN_SYNC_MIN_MS) || 60000;
+  const now = Date.now();
+
+  if (_syncing) return { skipped: 'em andamento' };
+  if (now - _lastSyncMs < minInterval) return { skipped: 'throttled' };
+
+  _syncing = true;
+  try {
+    const res = await importMatches();
+    _lastSyncMs = Date.now();
+    return res;
+  } catch (err) {
+    console.warn('⚠️  Sync de jogos no login falhou:', err.message);
+    return { error: err.message };
+  } finally {
+    _syncing = false;
+  }
+}

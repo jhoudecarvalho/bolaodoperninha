@@ -13,6 +13,7 @@ import matchesRouter from './routes/matches.js';
 import predictionsRouter from './routes/predictions.js';
 import resultsRouter from './routes/results.js';
 import rankingRouter from './routes/ranking.js';
+import sseRouter from './routes/sse.js';
 
 dotenv.config();
 
@@ -33,6 +34,9 @@ app.get('/api/health', (_req, res) => {
 
 // Auth (público)
 app.use('/api/auth', authRouter);
+
+// SSE (autenticação via query string, sem requireAuth middleware)
+app.use('/api/sse', sseRouter);
 
 // Rotas protegidas — exigem Bearer token
 app.use('/api/users', requireAuth, usersRouter);

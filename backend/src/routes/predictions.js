@@ -2,6 +2,7 @@ import { Router } from 'express';
 import pool from '../config/database.js';
 import { lockCheck } from '../middleware/lockCheck.js';
 import { denyAdmin } from '../middleware/auth.js';
+import { broadcast } from '../sse/broker.js';
 
 const router = Router();
 
@@ -100,6 +101,7 @@ router.post('/', denyAdmin, ownPlayerOnly, lockCheck, async (req, res) => {
     }
 
     await upsertPrediction({ player_id, match_id, home_score, away_score });
+    broadcastPrediction(player_id, match_id, home_score, away_score);
     res.status(201).json({ player_id, match_id, home_score, away_score });
   } catch (err) {
     if (err.code === 'ER_NO_REFERENCED_ROW_2') {
@@ -144,6 +146,10 @@ router.post('/bulk', denyAdmin, ownPlayerOnly, lockCheck, async (req, res) => {
     }
     await conn.commit();
 
+    for (const p of predictions) {
+      broadcastPrediction(player_id, Number(p.match_id), Number(p.home_score), Number(p.away_score));
+    }
+
     res.status(201).json({ ok: true, saved: predictions.length });
   } catch (err) {
     await conn.rollback();
@@ -161,6 +167,34 @@ async function upsertPrediction({ player_id, match_id, home_score, away_score },
      ON DUPLICATE KEY UPDATE home_score = VALUES(home_score), away_score = VALUES(away_score)`,
     [player_id, match_id, home_score, away_score]
   );
+}
+
+async function broadcastPrediction(player_id, match_id, home_score, away_score) {
+  try {
+    const [[player]] = await pool.query(
+      'SELECT name, avatar_color FROM players WHERE id = ?',
+      [player_id]
+    );
+    const [[match]] = await pool.query(
+      'SELECT group_id, kick_off_utc FROM matches WHERE id = ?',
+      [match_id]
+    );
+    if (!player || !match) return;
+
+    const started = new Date() >= new Date(match.kick_off_utc);
+    broadcast('prediction', {
+      match_id,
+      group_id: match.group_id,
+      player_id,
+      player_name: player.name,
+      avatar_color: player.avatar_color,
+      home_score: started ? home_score : null,
+      away_score: started ? away_score : null,
+      revealed: started,
+    });
+  } catch {
+    // SSE nunca pode quebrar a resposta HTTP
+  }
 }
 
 export default router;

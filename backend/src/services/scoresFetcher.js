@@ -1,4 +1,5 @@
 import pool from '../config/database.js';
+import { broadcast } from '../sse/broker.js';
 
 /**
  * Busca placares das APIs externas e atualiza a tabela `matches`.
@@ -189,7 +190,7 @@ export async function syncScores() {
 
   // Mapa name_en (lowercase) → match. Carrega jogos do banco.
   const [matches] = await pool.query(
-    `SELECT m.id, m.home_score, m.away_score, m.result_source,
+    `SELECT m.id, m.group_id, m.home_score, m.away_score, m.result_source,
             t1.name_en AS home_en, t2.name_en AS away_en
      FROM matches m
      JOIN teams t1 ON t1.id = m.home_team_id
@@ -220,7 +221,18 @@ export async function syncScores() {
        WHERE id = ?`,
       [g.homeScore, g.awayScore, newStatus, m.id]
     );
+    broadcast('result', {
+      match_id: m.id,
+      group_id: m.group_id,
+      home_score: g.homeScore,
+      away_score: g.awayScore,
+      status: newStatus,
+    });
     updated++;
+  }
+
+  if (updated > 0) {
+    broadcast('ranking', {});
   }
 
   console.log(`✅ Sincronização concluída (${source}): ${updated} resultados atualizados`);

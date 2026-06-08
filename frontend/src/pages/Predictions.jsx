@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthContext.jsx';
 import ScoreInput from '../components/ScoreInput.jsx';
 import CountdownTimer from '../components/CountdownTimer.jsx';
 import { formatLocal, isToday } from '../utils/datetime.js';
+import { useSSE } from '../hooks/useSSE.js';
 
 const GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
 
@@ -33,6 +34,21 @@ export default function Predictions() {
     MatchesAPI.list({ group }).then(setMatches);
     loadPredictors();
   }, [group]);
+
+  // SSE: atualiza predictors em tempo real quando alguém aposta
+  useSSE({
+    prediction(data) {
+      if (data.group_id !== group) return;
+      setPredictors((prev) => {
+        const list = prev[data.match_id] || [];
+        const exists = list.find((p) => p.player_id === data.player_id);
+        const updated = exists
+          ? list.map((p) => (p.player_id === data.player_id ? { ...p, ...data } : p))
+          : [...list, data];
+        return { ...prev, [data.match_id]: updated };
+      });
+    },
+  });
 
   // Carrega palpites do jogador
   useEffect(() => {

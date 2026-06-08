@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthContext.jsx';
 import LiveBanner from '../components/LiveBanner.jsx';
 import MatchCard from '../components/MatchCard.jsx';
 import RankingTable from '../components/RankingTable.jsx';
+import { useSSE } from '../hooks/useSSE.js';
 
 const MENU = [
   { to: '/jogadores', label: '👥 Participantes', desc: 'Gerenciar (admin)' },
@@ -34,9 +35,9 @@ export default function Home() {
 
   useEffect(() => {
     load();
-    const id = setInterval(load, 60000); // polling 60s
-    return () => clearInterval(id);
   }, []);
+
+  useSSE({ result: load, ranking: load });
 
   return (
     <div className="space-y-6">

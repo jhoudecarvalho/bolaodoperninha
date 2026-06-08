@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { MatchesAPI, ResultsAPI } from '../api/client.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import { formatLocal } from '../utils/datetime.js';
+import { useSSE } from '../hooks/useSSE.js';
 
 const GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
 
@@ -27,13 +28,12 @@ export default function Results() {
     load();
   }, [group]);
 
-  // Auto-refresh a cada 60s enquanto houver jogo ao vivo no grupo
-  useEffect(() => {
-    const hasLive = matches.some((m) => m.status === 'live');
-    if (!hasLive) return;
-    const timer = setInterval(load, 60_000);
-    return () => clearInterval(timer);
-  }, [matches, group]);
+  // SSE: recarrega quando um placar do grupo atual for atualizado
+  useSSE({
+    result(data) {
+      if (data.group_id === group) load();
+    },
+  });
 
   async function handleSync() {
     setSyncing(true);

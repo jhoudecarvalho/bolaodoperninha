@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { RankingAPI } from '../api/client.js';
 import RankingTable from '../components/RankingTable.jsx';
+import { useSSE } from '../hooks/useSSE.js';
 
 export default function Ranking() {
   const [rows, setRows] = useState([]);
@@ -10,9 +11,9 @@ export default function Ranking() {
   }
   useEffect(() => {
     load();
-    const id = setInterval(load, 60000);
-    return () => clearInterval(id);
   }, []);
+
+  useSSE({ ranking: load });
 
   const podium = rows.slice(0, 3);
 
@@ -39,7 +40,7 @@ export default function Ranking() {
       )}
 
       <RankingTable rows={rows} />
-      <p className="text-center text-xs text-ink-dim">Atualiza automaticamente a cada 60s</p>
+      <p className="text-center text-xs text-ink-dim">Atualiza em tempo real</p>
     </div>
   );
 }

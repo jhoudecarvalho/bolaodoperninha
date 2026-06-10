@@ -125,9 +125,20 @@ SELECT
     THEN 1 ELSE 0
   END) AS acertos_exatos,
   SUM(CASE
+    WHEN m.home_score IS NOT NULL AND
+         SIGN(pr.home_score - pr.away_score) = SIGN(m.home_score - m.away_score) AND
+         NOT (pr.home_score = m.home_score AND pr.away_score = m.away_score)
+    THEN 1 ELSE 0
+  END) AS acertos_vencedor,
+  SUM(CASE
     WHEN pr.home_score = m.home_score AND pr.away_score = m.away_score
          AND m.home_score IS NOT NULL
-    THEN 3 ELSE 0
+    THEN 3
+    WHEN m.home_score IS NOT NULL AND
+         SIGN(pr.home_score - pr.away_score) = SIGN(m.home_score - m.away_score) AND
+         NOT (pr.home_score = m.home_score AND pr.away_score = m.away_score)
+    THEN 1
+    ELSE 0
   END) AS pontos,
   SUM(CASE
     WHEN m.home_score IS NOT NULL THEN 1 ELSE 0

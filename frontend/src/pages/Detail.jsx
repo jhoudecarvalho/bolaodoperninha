@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { PlayersAPI, RankingAPI } from '../api/client.js';
+import { useAuth } from '../auth/AuthContext.jsx';
 import PlayerSelector from '../components/PlayerSelector.jsx';
 import { formatLocal } from '../utils/datetime.js';
 
 export default function Detail() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [params, setParams] = useSearchParams();
   const [players, setPlayers] = useState([]);
   const [playerId, setPlayerId] = useState(
@@ -13,6 +16,11 @@ export default function Detail() {
   const [data, setData] = useState(null);
 
   useEffect(() => {
+    if (!isAdmin) {
+      // Usuário comum: fixa no próprio player_id, sem precisar buscar lista
+      if (user?.player_id) setPlayerId(user.player_id);
+      return;
+    }
     PlayersAPI.list().then((pl) => {
       setPlayers(pl);
       if (!playerId && pl.length === 1) setPlayerId(pl[0].id);
@@ -32,13 +40,15 @@ export default function Detail() {
     <div className="space-y-6">
       <h1 className="font-display text-2xl font-bold">🔍 Detalhes por jogador</h1>
 
-      {players.length === 0 ? (
-        <p className="text-ink-mut">Nenhum jogador cadastrado.</p>
-      ) : (
-        <div className="card p-4">
-          <h2 className="mb-2 text-sm text-ink-mut">Selecione o jogador</h2>
-          <PlayerSelector players={players} value={playerId} onChange={setPlayerId} />
-        </div>
+      {isAdmin && (
+        players.length === 0 ? (
+          <p className="text-ink-mut">Nenhum jogador cadastrado.</p>
+        ) : (
+          <div className="card p-4">
+            <h2 className="mb-2 text-sm text-ink-mut">Selecione o jogador</h2>
+            <PlayerSelector players={players} value={playerId} onChange={setPlayerId} />
+          </div>
+        )
       )}
 
       {data && (
@@ -64,7 +74,6 @@ export default function Detail() {
           <div className="space-y-2">
             {data.predictions.map((p) => {
               const hasResult = p.real_home != null;
-              const won = p.pontos === 3;
               return (
                 <div key={p.match_id} className="card flex items-center justify-between p-3 text-sm">
                   <div className="flex flex-1 items-center gap-2">
@@ -83,8 +92,10 @@ export default function Detail() {
                       </span>
                     )}
                     {hasResult ? (
-                      won ? (
+                      p.pontos === 3 ? (
                         <span className="font-bold text-ok">✓ +3</span>
+                      ) : p.pontos === 1 ? (
+                        <span className="font-bold text-yellow-400">~ +1</span>
                       ) : (
                         <span className="font-bold text-danger">✗</span>
                       )

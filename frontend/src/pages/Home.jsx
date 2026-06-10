@@ -49,10 +49,13 @@ export default function Home() {
           Bolão Grupo Perninha: Copa do Mundo 2026
         </h1>
         <p className="mt-2 text-ink-mut">
-          Palpite nos 72 jogos da fase de grupos. Placar exato vale <b className="text-gold">3 pontos</b>.
+          Palpite nos 72 jogos da fase de grupos.{' '}
+          <b className="text-gold">Placar exato vale 3 pontos</b> •{' '}
+          <b className="text-yellow-400">Acertar o vencedor vale 1 ponto</b>
         </p>
         <div className="mt-4 flex flex-wrap justify-center gap-3 text-sm text-ink-mut">
-          <span className="badge bg-bg-900">🎯 3 pts por placar exato</span>
+          <span className="badge bg-bg-900">🎯 3 pts — placar exato</span>
+          <span className="badge bg-bg-900">⚽ 1 pt — acertou o vencedor</span>
           <span className="badge bg-bg-900">🔒 Bloqueio no apito inicial</span>
           <span className="badge bg-bg-900">📡 Placares automáticos via API</span>
         </div>

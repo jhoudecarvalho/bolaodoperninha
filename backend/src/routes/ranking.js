@@ -14,6 +14,7 @@ router.get('/', async (_req, res) => {
       avatar_color: r.avatar_color,
       pontos: Number(r.pontos) || 0,
       acertos_exatos: Number(r.acertos_exatos) || 0,
+      acertos_vencedor: Number(r.acertos_vencedor) || 0,
       jogos_com_resultado: Number(r.jogos_com_resultado) || 0,
       total_palpites: Number(r.total_palpites) || 0,
     }));
@@ -43,6 +44,7 @@ router.get('/:player_id/detail', async (req, res) => {
          CASE
            WHEN m.home_score IS NULL THEN NULL
            WHEN pr.home_score = m.home_score AND pr.away_score = m.away_score THEN 3
+           WHEN SIGN(pr.home_score - pr.away_score) = SIGN(m.home_score - m.away_score) THEN 1
            ELSE 0
          END AS pontos
        FROM predictions pr

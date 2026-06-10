@@ -40,7 +40,10 @@ export default function Ranking() {
       )}
 
       <RankingTable rows={rows} />
-      <p className="text-center text-xs text-ink-dim">Atualiza em tempo real</p>
+      <div className="text-center text-xs text-ink-dim space-y-1">
+        <p>🎯 Placar exato = <b className="text-gold">3 pts</b> &nbsp;·&nbsp; ⚽ Acertou o vencedor = <b className="text-yellow-400">1 pt</b></p>
+        <p>Atualiza em tempo real</p>
+      </div>
     </div>
   );
 }

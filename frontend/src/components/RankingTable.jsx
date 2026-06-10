@@ -15,7 +15,8 @@ export default function RankingTable({ rows = [], compact = false }) {
             <th className="px-3 py-2 w-12">#</th>
             <th className="px-3 py-2">Jogador</th>
             <th className="px-3 py-2 text-right">Pontos</th>
-            {!compact && <th className="px-3 py-2 text-right">Acertos</th>}
+            {!compact && <th className="px-3 py-2 text-right">Exatos</th>}
+            {!compact && <th className="px-3 py-2 text-right">Vencedor</th>}
             {!compact && <th className="px-3 py-2 text-right">Apurados</th>}
           </tr>
         </thead>
@@ -47,6 +48,9 @@ export default function RankingTable({ rows = [], compact = false }) {
                 </td>
                 {!compact && (
                   <td className="px-3 py-2 text-right tabular-nums">{r.acertos_exatos}</td>
+                )}
+                {!compact && (
+                  <td className="px-3 py-2 text-right tabular-nums text-ink-mut">{r.acertos_vencedor}</td>
                 )}
                 {!compact && (
                   <td className="px-3 py-2 text-right tabular-nums text-ink-mut">

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { PredictionsAPI } from '../api/client.js';
 import { formatLocal, isToday } from '../utils/datetime.js';
 import CountdownTimer from './CountdownTimer.jsx';
+import MatchTimer from './MatchTimer.jsx';
 import ScoreInput from './ScoreInput.jsx';
 
 function StatusBadge({ match }) {
@@ -15,6 +16,9 @@ function StatusBadge({ match }) {
         AO VIVO
       </span>
     );
+  }
+  if (match.status === 'paused') {
+    return <span className="badge bg-warn/20 text-warn">⏸ PAUSADO</span>;
   }
   if (match.locked && match.status !== 'finished') {
     return <span className="badge bg-danger/15 text-danger">🔒 BLOQUEADO</span>;
@@ -122,7 +126,17 @@ export default function MatchCard({
           Grupo {match.group_id} · {formatLocal(match.kick_off_utc)}
           {today && <span className="ml-1 text-gold">· Hoje</span>}
         </span>
-        <StatusBadge match={match} />
+        <div className="flex items-center gap-2">
+          {(match.status === 'live' || match.status === 'paused') && (
+            <MatchTimer
+              kickoffUtc={match.kick_off_utc}
+              status={match.status}
+              liveMinute={match.live_minute}
+              liveInjuryTime={match.live_injury_time}
+            />
+          )}
+          <StatusBadge match={match} />
+        </div>
       </div>
 
       <div className="flex items-center justify-between gap-2">
@@ -146,6 +160,21 @@ export default function MatchCard({
           <span className="text-2xl">{match.away_flag}</span>
         </div>
       </div>
+
+      {hasResult && (match.home_scorers?.length > 0 || match.away_scorers?.length > 0) && (
+        <div className="mt-2 flex justify-between text-xs text-ink-mut">
+          <div className="space-y-0.5">
+            {(match.home_scorers || []).map((s, i) => (
+              <div key={i}>⚽ {s.name} <span className="text-gold">{s.minute}'</span></div>
+            ))}
+          </div>
+          <div className="space-y-0.5 text-right">
+            {(match.away_scorers || []).map((s, i) => (
+              <div key={i}><span className="text-gold">{s.minute}'</span> {s.name} ⚽</div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {hasResult && match.result_source === 'api' && (
         <div className="mt-2 text-right">

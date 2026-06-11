@@ -94,6 +94,17 @@ router.post('/', async (req, res) => {
   }
 });
 
+// DELETE /api/users/devices → reseta fingerprint de TODOS os participantes
+router.delete('/devices', async (_req, res) => {
+  try {
+    const [result] = await pool.query("UPDATE users SET device_fingerprint = NULL WHERE role = 'user'");
+    res.json({ ok: true, count: result.affectedRows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao resetar dispositivos' });
+  }
+});
+
 // DELETE /api/users/:id/device → reseta o fingerprint do dispositivo
 router.delete('/:id/device', async (req, res) => {
   try {

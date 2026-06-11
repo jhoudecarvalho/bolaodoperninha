@@ -50,6 +50,7 @@ export const UsersAPI = {
   create: (data) => api.post('/users', data).then((r) => r.data),
   remove: (id) => api.delete(`/users/${id}`).then((r) => r.data),
   resetDevice: (id) => api.delete(`/users/${id}/device`).then((r) => r.data),
+  resetAllDevices: () => api.delete('/users/devices').then((r) => r.data),
 };
 
 export const MatchesAPI = {
@@ -81,4 +82,9 @@ export const ResultsAPI = {
 export const RankingAPI = {
   list: () => api.get('/ranking').then((r) => r.data),
   detail: (player_id) => api.get(`/ranking/${player_id}/detail`).then((r) => r.data),
+};
+
+export const StandingsAPI = {
+  groups: () => api.get('/standings').then((r) => r.data),
+  scorers: () => api.get('/standings/scorers').then((r) => r.data),
 };

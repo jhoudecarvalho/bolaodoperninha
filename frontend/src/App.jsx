@@ -8,6 +8,7 @@ import Predictions from './pages/Predictions.jsx';
 import Results from './pages/Results.jsx';
 import Ranking from './pages/Ranking.jsx';
 import Detail from './pages/Detail.jsx';
+import Standings from './pages/Standings.jsx';
 
 function Layout({ children }) {
   return (
@@ -37,6 +38,7 @@ export default function App() {
                 <Route path="/resultados" element={<Results />} />
                 <Route path="/ranking" element={<Ranking />} />
                 <Route path="/detalhes" element={<Detail />} />
+                <Route path="/classificacao" element={<Standings />} />
               </Routes>
             </Layout>
           </ProtectedRoute>

@@ -45,12 +45,16 @@ CREATE TABLE matches (
   match_date DATE NOT NULL,
   kick_off_utc DATETIME NOT NULL,
   venue VARCHAR(100),
-  status ENUM('scheduled', 'live', 'finished') DEFAULT 'scheduled',
+  status ENUM('scheduled', 'live', 'paused', 'finished') DEFAULT 'scheduled',
 
   home_score INT DEFAULT NULL,
   away_score INT DEFAULT NULL,
   result_source ENUM('api', 'manual') DEFAULT NULL,
   result_updated_at DATETIME DEFAULT NULL,
+  live_minute TINYINT UNSIGNED DEFAULT NULL,
+  live_injury_time TINYINT UNSIGNED DEFAULT NULL,
+  home_scorers JSON DEFAULT NULL,
+  away_scorers JSON DEFAULT NULL,
 
   FOREIGN KEY (group_id) REFERENCES `groups`(id),
   FOREIGN KEY (home_team_id) REFERENCES teams(id),

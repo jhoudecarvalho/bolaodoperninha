@@ -206,7 +206,7 @@ export default function Predictions() {
                       </span>
                       {m.locked ? (
                         <span className="text-danger">
-                          {m.status === 'live' ? '🔴 AO VIVO' : '🔒 BLOQUEADO'}
+                          {m.status === 'live' ? '🔴 AO VIVO' : m.status === 'paused' ? '⏸ PAUSADO' : '🔒 BLOQUEADO'}
                         </span>
                       ) : (
                         <CountdownTimer kickoff={m.kick_off_utc} />

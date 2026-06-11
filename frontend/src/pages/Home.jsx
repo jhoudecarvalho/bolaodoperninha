@@ -12,6 +12,7 @@ const MENU = [
   { to: '/palpites', label: '🎯 Palpites', desc: 'Por grupo' },
   { to: '/resultados', label: '📊 Resultados', desc: 'API + manual' },
   { to: '/ranking', label: '🏆 Ranking', desc: 'Tempo real' },
+  { to: '/classificacao', label: '🗂️ Classificação', desc: 'Grupos + artilheiros' },
   { to: '/detalhes', label: '🔍 Detalhes', desc: 'Por jogador' },
 ];
 
@@ -24,7 +25,7 @@ export default function Home() {
 
   async function load() {
     const [liveData, up, rk] = await Promise.all([
-      MatchesAPI.list({ status: 'live' }).catch(() => []),
+      MatchesAPI.list({ status: 'in_progress' }).catch(() => []),
       MatchesAPI.upcoming(10).catch(() => []),
       RankingAPI.list().catch(() => []),
     ]);

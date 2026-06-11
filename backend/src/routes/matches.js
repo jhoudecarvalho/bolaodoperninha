@@ -22,6 +22,8 @@ const BASE_SELECT = `
   SELECT
     m.id, m.group_id, m.match_date, m.kick_off_utc, m.venue, m.status,
     m.home_score, m.away_score, m.result_source, m.result_updated_at,
+    m.live_minute, m.live_injury_time,
+    m.home_scorers, m.away_scorers,
     m.home_team_id, m.away_team_id,
     t1.name AS home_name, t1.name_en AS home_name_en, t1.flag_emoji AS home_flag,
     t2.name AS away_name, t2.name_en AS away_name_en, t2.flag_emoji AS away_flag,
@@ -42,7 +44,9 @@ router.get('/', async (req, res) => {
       where.push('m.group_id = ?');
       params.push(group);
     }
-    if (status) {
+    if (status === 'in_progress') {
+      where.push("m.status IN ('live', 'paused')");
+    } else if (status) {
       where.push('m.status = ?');
       params.push(status);
     }

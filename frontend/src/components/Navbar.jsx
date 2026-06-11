@@ -7,6 +7,7 @@ const LINKS = [
   { to: '/palpites', label: '🎯 Palpites' },
   { to: '/resultados', label: '📊 Resultados' },
   { to: '/ranking', label: '🏆 Ranking' },
+  { to: '/classificacao', label: '🗂️ Classificação' },
   { to: '/detalhes', label: '🔍 Detalhes' },
 ];
 

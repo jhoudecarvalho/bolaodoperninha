@@ -106,7 +106,7 @@ export default function Results() {
 
       <div className="space-y-3">
         {matches.map((m) => {
-          const isLive = m.status === 'live';
+          const isLive = m.status === 'live' || m.status === 'paused';
           const hasResult = m.home_score != null && m.away_score != null;
           return (
             <div key={m.id} className={`card p-4 ${isLive ? 'border-ok/50' : ''}`}>
@@ -167,6 +167,22 @@ export default function Results() {
                   </div>
                 </div>
               </div>
+
+              {/* Gols */}
+              {hasResult && (m.home_scorers?.length > 0 || m.away_scorers?.length > 0) && (
+                <div className="mt-2 flex justify-between text-xs text-ink-mut">
+                  <div className="space-y-0.5">
+                    {(m.home_scorers || []).map((s, i) => (
+                      <div key={i}>⚽ {s.name} <span className="text-gold">{s.minute}'</span></div>
+                    ))}
+                  </div>
+                  <div className="space-y-0.5 text-right">
+                    {(m.away_scorers || []).map((s, i) => (
+                      <div key={i}><span className="text-gold">{s.minute}'</span> {s.name} ⚽</div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Acertadores / acertando agora */}
               {hasResult && (() => {

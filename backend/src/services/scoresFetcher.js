@@ -4,11 +4,14 @@ import { broadcast } from '../sse/broker.js';
 /**
  * Busca placares das APIs externas e atualiza a tabela `matches`.
  * Fontes (em ordem de prioridade):
- *   1. worldcup26.ir   (tempo real, sem auth)
- *   2. openfootball     (GitHub raw, fallback)
+ *   1. worldcup26.ir        (tempo real, sem auth)
+ *   2. football-data.org    (confiável, requer token, live scores)
+ *   3. openfootball         (GitHub raw, último recurso — só calendário)
  */
 
 const PRIMARY = process.env.SCORES_API_PRIMARY || 'https://worldcup26.ir/get/games';
+const FOOTBALL_DATA_URL = 'https://api.football-data.org/v4/competitions/WC/matches';
+const FOOTBALL_DATA_TOKEN = process.env.FOOTBALL_DATA_TOKEN || '';
 const FALLBACK =
   process.env.SCORES_API_FALLBACK ||
   'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json';
@@ -33,9 +36,23 @@ const TEAM_MAP = {
   'United States of America': 'United States',
   Bosnia: 'Bosnia and Herzegovina',
   'Bosnia & Herzegovina': 'Bosnia and Herzegovina',
+  'Bosnia-Herzegovina': 'Bosnia and Herzegovina',
   Curaçao: 'Curacao',
   Holland: 'Netherlands',
 };
+
+// Formato worldcup26.ir: {"“J. Quiñones 9’”,“R. Jiménez 67’”} (aspas Unicode, chaves em vez de colchetes)
+function parseScorers(raw) {
+  if (!raw || raw === 'null') return [];
+  const results = [];
+  const re = /([A-Za-z\xC0-\xD6\xD8-\xF6\xF8-\xFF][A-Za-z\xC0-\xD6\xD8-\xF6\xF8-\xFF\s.''-]*?)\s+(\d+)'/g;
+  let m;
+  while ((m = re.exec(raw)) !== null) {
+    const name = m[1].trim();
+    if (name.length > 1) results.push({ name, minute: Number(m[2]) });
+  }
+  return results;
+}
 
 function normalizeName(raw) {
   if (!raw) return '';
@@ -43,13 +60,13 @@ function normalizeName(raw) {
   return TEAM_MAP[trimmed] || trimmed;
 }
 
-async function fetchJson(url, timeoutMs = 8000) {
+async function fetchJson(url, timeoutMs = 25000, extraHeaders = {}) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const res = await fetch(url, {
       signal: ctrl.signal,
-      headers: { 'User-Agent': 'bolao-copa-2026' },
+      headers: { 'User-Agent': 'bolao-copa-2026', ...extraHeaders },
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
@@ -98,33 +115,80 @@ function parsePrimary(data) {
       ? pickScore(g.away_score, g.awayScore, g.score?.away, g.goals?.away, g.score2)
       : null;
 
-    out.push({ home, away, homeScore: hs, awayScore: as, finished });
+    // worldcup26.ir: pausa de intervalo ou interrupção (tempestade, etc.)
+    const PAUSED_ELAPSED = new Set(['ht', 'pause', 'paused', 'suspended', 'interruption', 'break']);
+    const paused = !finished && (PAUSED_ELAPSED.has(elapsed) || statusStr.includes('suspend') || statusStr.includes('interrupt'));
+
+    // Tenta extrair minuto do time_elapsed se vier como número (ex: "67" ou "45+2")
+    let minute = null;
+    let injuryTime = null;
+    if (!finished && !paused) {
+      const plusMatch = elapsed.match(/^(\d+)\+(\d+)$/);
+      const numMatch = elapsed.match(/^(\d+)$/);
+      if (plusMatch) { minute = Number(plusMatch[1]); injuryTime = Number(plusMatch[2]); }
+      else if (numMatch) { minute = Number(numMatch[1]); }
+    }
+
+    const homeScorers = parseScorers(g.home_scorers);
+    const awayScorers = parseScorers(g.away_scorers);
+
+    out.push({ home, away, homeScore: hs, awayScore: as, finished, paused, minute, injuryTime, homeScorers, awayScorers });
   }
   return out;
 }
 
 function parseFallback(data) {
-  // openfootball: { rounds: [ { matches: [ { team1, team2, score: { ft:[x,y] } } ] } ] }
+  // openfootball: { rounds: [ { matches: [...] } ] } ou { matches: [...] }
   const out = [];
   const rounds = data?.rounds || [];
-  for (const round of rounds) {
-    for (const m of round.matches || []) {
-      const home = normalizeName(m.team1?.name || m.team1);
-      const away = normalizeName(m.team2?.name || m.team2);
-      if (!home || !away) continue;
+  const flat = data?.matches || [];
+  const allMatches = rounds.length
+    ? rounds.flatMap((r) => r.matches || [])
+    : flat;
 
-      const ft = m.score?.ft;
-      const hs = Array.isArray(ft) ? ft[0] : null;
-      const as = Array.isArray(ft) ? ft[1] : null;
+  for (const m of allMatches) {
+    const home = normalizeName(m.team1?.name || m.team1);
+    const away = normalizeName(m.team2?.name || m.team2);
+    if (!home || !away) continue;
 
-      out.push({
-        home,
-        away,
-        homeScore: hs ?? null,
-        awayScore: as ?? null,
-        finished: Array.isArray(ft) && ft.length === 2,
-      });
-    }
+    const ft = m.score?.ft;
+    const hs = Array.isArray(ft) ? ft[0] : null;
+    const as = Array.isArray(ft) ? ft[1] : null;
+
+    out.push({
+      home,
+      away,
+      homeScore: hs ?? null,
+      awayScore: as ?? null,
+      finished: Array.isArray(ft) && ft.length === 2,
+    });
+  }
+  return out;
+}
+
+function parseFootballData(data) {
+  // football-data.org: { matches: [ { homeTeam, awayTeam, status, score: { fullTime: { home, away } } } ] }
+  // PAUSED = intervalo; SUSPENDED = interrupção (clima, emergência)
+  const SCORE_STATUSES = new Set(['IN_PLAY', 'PAUSED', 'SUSPENDED', 'FINISHED']);
+  const out = [];
+  for (const m of data?.matches || []) {
+    const home = normalizeName(m.homeTeam?.name);
+    const away = normalizeName(m.awayTeam?.name);
+    if (!home || !away) continue;
+
+    const status = m.status || '';
+    const finished = status === 'FINISHED';
+    const paused = status === 'PAUSED' || status === 'SUSPENDED';
+    const hasScore = SCORE_STATUSES.has(status);
+
+    const hs = hasScore ? (m.score?.fullTime?.home ?? null) : null;
+    const as = hasScore ? (m.score?.fullTime?.away ?? null) : null;
+
+    // football-data.org fornece minute (inteiro) e injuryTime para jogos IN_PLAY
+    const minute = (m.minute != null && !finished) ? Number(m.minute) : null;
+    const injuryTime = (m.injuryTime != null && !finished) ? Number(m.injuryTime) : null;
+
+    out.push({ home, away, homeScore: hs, awayScore: as, finished, paused, minute, injuryTime, homeScorers: [], awayScorers: [] });
   }
   return out;
 }
@@ -138,8 +202,8 @@ function pickScore(...vals) {
 
 /**
  * Atualiza status dos jogos com base no horário (independe da API externa).
- *   scheduled → live   quando NOW >= kick_off
- *   live → finished     quando NOW >= kick_off + 2h30 (se não veio resultado)
+ *   scheduled → live     quando NOW >= kick_off
+ *   live/paused → finished  quando NOW >= kick_off + 4h (folga para jogos suspensos)
  */
 export async function updateMatchStatuses() {
   await pool.query(
@@ -150,8 +214,8 @@ export async function updateMatchStatuses() {
   await pool.query(
     `UPDATE matches
        SET status = 'finished'
-     WHERE status = 'live'
-       AND UTC_TIMESTAMP() >= DATE_ADD(kick_off_utc, INTERVAL 150 MINUTE)`
+     WHERE status IN ('live', 'paused')
+       AND UTC_TIMESTAMP() >= DATE_ADD(kick_off_utc, INTERVAL 240 MINUTE)`
   );
 }
 
@@ -170,13 +234,23 @@ export async function syncScores() {
     console.warn('⚠️  API primária falhou:', err.message);
   }
 
+  if (!games.length && FOOTBALL_DATA_TOKEN) {
+    try {
+      const data = await fetchJson(FOOTBALL_DATA_URL, 15000, { 'X-Auth-Token': FOOTBALL_DATA_TOKEN });
+      games = parseFootballData(data);
+      if (games.length) source = 'football-data';
+    } catch (err) {
+      console.warn('⚠️  football-data.org falhou:', err.message);
+    }
+  }
+
   if (!games.length) {
     try {
       const data = await fetchJson(FALLBACK);
       games = parseFallback(data);
-      if (games.length) source = 'fallback';
+      if (games.length) source = 'openfootball';
     } catch (err) {
-      console.warn('⚠️  API fallback falhou:', err.message);
+      console.warn('⚠️  API openfootball falhou:', err.message);
     }
   }
 
@@ -190,7 +264,8 @@ export async function syncScores() {
 
   // Mapa name_en (lowercase) → match. Carrega jogos do banco.
   const [matches] = await pool.query(
-    `SELECT m.id, m.group_id, m.home_score, m.away_score, m.result_source,
+    `SELECT m.id, m.group_id, m.home_score, m.away_score, m.status, m.result_source,
+            m.live_minute,
             t1.name_en AS home_en, t2.name_en AS away_en
      FROM matches m
      JOIN teams t1 ON t1.id = m.home_team_id
@@ -210,16 +285,29 @@ export async function syncScores() {
     // Não sobrescrever resultado inserido manualmente
     if (m.result_source === 'manual') continue;
 
-    // Só atualiza se mudou
-    if (m.home_score === g.homeScore && m.away_score === g.awayScore) continue;
+    // Só atualiza se placar, status ou minuto mudou
+    const newStatus = g.finished ? 'finished' : g.paused ? 'paused' : 'live';
+    const newMinute = g.finished ? null : (g.minute ?? null);
+    const newInjury = g.finished ? null : (g.injuryTime ?? null);
+    if (
+      m.home_score === g.homeScore &&
+      m.away_score === g.awayScore &&
+      m.status === newStatus &&
+      m.live_minute === newMinute
+    ) continue;
 
-    const newStatus = g.finished ? 'finished' : 'live';
+    const newHomeScorers = g.homeScorers?.length ? JSON.stringify(g.homeScorers) : null;
+    const newAwayScorers = g.awayScorers?.length ? JSON.stringify(g.awayScorers) : null;
+
     await pool.query(
       `UPDATE matches
          SET home_score = ?, away_score = ?, status = ?,
+             live_minute = ?, live_injury_time = ?,
+             home_scorers = COALESCE(?, home_scorers),
+             away_scorers = COALESCE(?, away_scorers),
              result_source = 'api', result_updated_at = UTC_TIMESTAMP()
        WHERE id = ?`,
-      [g.homeScore, g.awayScore, newStatus, m.id]
+      [g.homeScore, g.awayScore, newStatus, newMinute, newInjury, newHomeScorers, newAwayScorers, m.id]
     );
     broadcast('result', {
       match_id: m.id,
@@ -227,6 +315,8 @@ export async function syncScores() {
       home_score: g.homeScore,
       away_score: g.awayScore,
       status: newStatus,
+      live_minute: newMinute,
+      live_injury_time: newInjury,
     });
     updated++;
   }

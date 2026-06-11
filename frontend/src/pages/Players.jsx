@@ -58,6 +58,16 @@ export default function Players() {
     }
   }
 
+  async function handleResetAllDevices() {
+    if (!confirm('Limpar dispositivos de TODOS os participantes? Cada um precisará fazer login novamente para registrar o novo dispositivo.')) return;
+    try {
+      const { count } = await UsersAPI.resetAllDevices();
+      setOk(`Dispositivos de ${count} participante(s) liberados.`);
+    } catch {
+      setError('Erro ao liberar dispositivos.');
+    }
+  }
+
   if (!isAdmin) {
     return (
       <div className="space-y-6">
@@ -117,9 +127,20 @@ export default function Players() {
       {error && <p className="text-sm text-danger">{error}</p>}
       {ok && <p className="text-sm text-ok">{ok}</p>}
 
-      <p className="text-sm text-ink-mut">
-        {participants.length} {participants.length === 1 ? 'participante' : 'participantes'}
-      </p>
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-ink-mut">
+          {participants.length} {participants.length === 1 ? 'participante' : 'participantes'}
+        </p>
+        {participants.length > 0 && (
+          <button
+            onClick={handleResetAllDevices}
+            className="text-xs text-ink-mut hover:text-gold"
+            title="Limpar dispositivo de todos os participantes"
+          >
+            📱 Limpar todos os dispositivos
+          </button>
+        )}
+      </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {participants.map((p) => (

@@ -13,6 +13,7 @@ import matchesRouter from './routes/matches.js';
 import predictionsRouter from './routes/predictions.js';
 import resultsRouter from './routes/results.js';
 import rankingRouter from './routes/ranking.js';
+import standingsRouter from './routes/standings.js';
 import sseRouter from './routes/sse.js';
 
 dotenv.config();
@@ -45,6 +46,7 @@ app.use('/api/matches', requireAuth, matchesRouter);
 app.use('/api/predictions', requireAuth, predictionsRouter);
 app.use('/api/results', requireAuth, resultsRouter);
 app.use('/api/ranking', requireAuth, rankingRouter);
+app.use('/api/standings', requireAuth, standingsRouter);
 
 // 404
 app.use((req, res) => {

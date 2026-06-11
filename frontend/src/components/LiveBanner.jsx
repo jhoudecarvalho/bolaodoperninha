@@ -1,5 +1,10 @@
 import MatchTimer from './MatchTimer.jsx';
 
+function parseScorers(raw) {
+  if (!raw) return [];
+  try { return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return []; }
+}
+
 export default function LiveBanner({ matches = [] }) {
   if (!matches.length) return null;
 
@@ -41,6 +46,26 @@ export default function LiveBanner({ matches = [] }) {
                 liveInjuryTime={m.live_injury_time}
               />
             </div>
+            {/* Goleadores */}
+            {(() => {
+              const hs = parseScorers(m.home_scorers);
+              const as = parseScorers(m.away_scorers);
+              if (!hs.length && !as.length) return null;
+              return (
+                <div className="mt-2 flex justify-between text-xs text-ink-mut gap-2">
+                  <div className="flex flex-col gap-0.5">
+                    {hs.map((s, i) => (
+                      <span key={i}>⚽ {s.name} {s.minute}'</span>
+                    ))}
+                  </div>
+                  <div className="flex flex-col gap-0.5 text-right">
+                    {as.map((s, i) => (
+                      <span key={i}>{s.minute}' {s.name} ⚽</span>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         ))}
       </div>

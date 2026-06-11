@@ -41,7 +41,7 @@ services:
       SCORES_API_PRIMARY: https://worldcup26.ir/get/games
       FOOTBALL_DATA_TOKEN: 5296f1071d064c748d8012636c474110
       SCORES_API_FALLBACK: https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json
-      SCORES_SYNC_INTERVAL_MS: 30000
+      SCORES_SYNC_INTERVAL_MS: 10000
     networks:
       - bolao_net
 

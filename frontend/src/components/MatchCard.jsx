@@ -166,11 +166,16 @@ export default function MatchCard({
               <div className="flex flex-wrap gap-1.5">
                 {predictions.map((p) => {
                   const revealed = p.revealed !== false && p.home_score != null;
+                  const outcome = (h, a) => h > a ? 'home' : h < a ? 'away' : 'draw';
                   const exact =
                     revealed &&
                     hasResult &&
                     p.home_score === match.home_score &&
                     p.away_score === match.away_score;
+                  const correctOutcome =
+                    revealed && hasResult && !exact &&
+                    outcome(p.home_score, p.away_score) === outcome(match.home_score, match.away_score);
+                  const pts = revealed && hasResult ? (exact ? 3 : correctOutcome ? 1 : 0) : null;
                   return (
                     <span
                       key={p.id}
@@ -191,7 +196,15 @@ export default function MatchCard({
                       ) : (
                         <span className="text-ok">✔</span>
                       )}
-                      {exact && '✓'}
+                      {pts !== null && (
+                        <span className={
+                          exact ? 'font-bold text-gold' :
+                          correctOutcome ? 'font-bold text-yellow-400' :
+                          'text-ink-dim'
+                        }>
+                          {pts > 0 ? `+${pts}` : '0'}
+                        </span>
+                      )}
                     </span>
                   );
                 })}

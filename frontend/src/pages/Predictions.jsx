@@ -267,10 +267,20 @@ export default function Predictions() {
                           <div className="flex flex-wrap gap-1.5">
                             {who.map((w) => {
                               const revealed = w.revealed !== false && w.home_score != null;
+                              const hasResult = m.home_score != null && m.away_score != null;
+                              const outcome = (h, a) => h > a ? 'home' : h < a ? 'away' : 'draw';
+                              const exact =
+                                revealed && hasResult &&
+                                w.home_score === m.home_score &&
+                                w.away_score === m.away_score;
+                              const correctOutcome =
+                                revealed && hasResult && !exact &&
+                                outcome(w.home_score, w.away_score) === outcome(m.home_score, m.away_score);
+                              const pts = revealed && hasResult ? (exact ? 3 : correctOutcome ? 1 : 0) : null;
                               return (
                                 <span
                                   key={w.id}
-                                  className="badge bg-bg-900 text-ink"
+                                  className={`badge bg-bg-900 ${exact ? 'text-ok ring-1 ring-ok/40' : 'text-ink'}`}
                                   title={w.player_name}
                                 >
                                   <span
@@ -284,6 +294,15 @@ export default function Predictions() {
                                     </b>
                                   ) : (
                                     <span className="text-ok">✔</span>
+                                  )}
+                                  {pts !== null && (
+                                    <span className={
+                                      exact ? 'font-bold text-gold' :
+                                      correctOutcome ? 'font-bold text-yellow-400' :
+                                      'text-ink-dim'
+                                    }>
+                                      {pts > 0 ? `+${pts}` : '0'}
+                                    </span>
                                   )}
                                 </span>
                               );

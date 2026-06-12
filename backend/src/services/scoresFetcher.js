@@ -226,22 +226,39 @@ export async function syncScores() {
   let games = [];
   let source = null;
 
-  try {
-    const data = await fetchJson(PRIMARY);
-    games = parsePrimary(data);
+  // Busca primária e football-data.org em paralelo.
+  // football-data.org é sempre consultada para jogos ao vivo (IN_PLAY/PAUSED/FINISHED)
+  // e sobrescreve a primária quando esta ainda não atualizou o jogo.
+  const [primaryResult, fdResult] = await Promise.allSettled([
+    fetchJson(PRIMARY),
+    FOOTBALL_DATA_TOKEN
+      ? fetchJson(`${FOOTBALL_DATA_URL}?status=IN_PLAY,PAUSED,FINISHED`, 15000, { 'X-Auth-Token': FOOTBALL_DATA_TOKEN })
+      : Promise.reject(new Error('sem token')),
+  ]);
+
+  if (primaryResult.status === 'fulfilled') {
+    games = parsePrimary(primaryResult.value);
     if (games.length) source = 'primary';
-  } catch (err) {
-    console.warn('⚠️  API primária falhou:', err.message);
+  } else {
+    console.warn('⚠️  API primária falhou:', primaryResult.reason.message);
   }
 
-  if (!games.length && FOOTBALL_DATA_TOKEN) {
-    try {
-      const data = await fetchJson(FOOTBALL_DATA_URL, 15000, { 'X-Auth-Token': FOOTBALL_DATA_TOKEN });
-      games = parseFootballData(data);
-      if (games.length) source = 'football-data';
-    } catch (err) {
-      console.warn('⚠️  football-data.org falhou:', err.message);
+  // Mescla football-data.org: sobrescreve jogos que ela conhece (ao vivo/encerrado)
+  if (fdResult.status === 'fulfilled') {
+    const fdGames = parseFootballData(fdResult.value);
+    if (fdGames.length) {
+      const fdKey = (h, a) => `${h.toLowerCase()}|${a.toLowerCase()}`;
+      const fdMap = new Map(fdGames.map((g) => [fdKey(g.home, g.away), g]));
+      // Substitui entradas da primária pelos dados da football-data.org
+      games = games.map((g) => fdMap.get(fdKey(g.home, g.away)) ?? g);
+      // Adiciona jogos que só a football-data.org conhece
+      for (const [k, g] of fdMap) {
+        if (!games.some((pg) => fdKey(pg.home, pg.away) === k)) games.push(g);
+      }
+      source = source ? `${source}+fd` : 'football-data';
     }
+  } else if (!games.length) {
+    console.warn('⚠️  football-data.org falhou:', fdResult.reason.message);
   }
 
   if (!games.length) {
@@ -278,9 +295,19 @@ export async function syncScores() {
 
   let updated = 0;
   for (const g of games) {
-    if (g.homeScore == null || g.awayScore == null) continue;
     const m = index.get(key(g.home, g.away));
     if (!m) continue;
+
+    // Se a API ainda não reportou placar mas o jogo já está live no banco,
+    // aceita 0×0 para exibir corretamente (API lenta a atualizar time_elapsed).
+    if (g.homeScore == null || g.awayScore == null) {
+      if (m.status === 'live' && m.home_score == null && !g.finished) {
+        g.homeScore = 0;
+        g.awayScore = 0;
+      } else {
+        continue;
+      }
+    }
 
     // Não sobrescrever resultado inserido manualmente
     if (m.result_source === 'manual') continue;

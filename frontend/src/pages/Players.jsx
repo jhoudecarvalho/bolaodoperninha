@@ -131,16 +131,24 @@ export default function Players() {
         <p className="text-sm text-ink-mut">
           {participants.length} {participants.length === 1 ? 'participante' : 'participantes'}
         </p>
-        {participants.length > 0 && (
+      </div>
+
+      {participants.length > 0 && (
+        <div className="card flex flex-wrap items-center justify-between gap-3 border-warn/30 bg-warn/5 p-4">
+          <div>
+            <p className="text-sm font-medium text-warn">📱 Dispositivos autorizados</p>
+            <p className="text-xs text-ink-mut mt-0.5">
+              Se alguém receber "Dispositivo não autorizado", libere o acesso aqui.
+            </p>
+          </div>
           <button
             onClick={handleResetAllDevices}
-            className="text-xs text-ink-mut hover:text-gold"
-            title="Limpar dispositivo de todos os participantes"
+            className="btn border border-warn/50 text-warn hover:bg-warn/10 text-sm"
           >
-            📱 Limpar todos os dispositivos
+            🔓 Liberar todos os dispositivos
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {participants.map((p) => (

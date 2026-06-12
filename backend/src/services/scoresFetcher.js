@@ -41,11 +41,12 @@ const TEAM_MAP = {
   Holland: 'Netherlands',
 };
 
-// Formato worldcup26.ir: {"“J. Quiñones 9’”,“R. Jiménez 67’”} (aspas Unicode, chaves em vez de colchetes)
+// Formato worldcup26.ir: {"J. Quinones 9'","R. Jimenez 67'"} (chaves em vez de colchetes)
 function parseScorers(raw) {
   if (!raw || raw === 'null') return [];
   const results = [];
-  const re = /([A-Za-z\xC0-\xD6\xD8-\xF6\xF8-\xFF][A-Za-z\xC0-\xD6\xD8-\xF6\xF8-\xFF\s.''-]*?)\s+(\d+)'/g;
+  // \p{L} cobre letras Unicode (ć, č, ñ, etc.); separador e apostrofo = U+0027
+  const re = new RegExp("(\\p{L}[\\p{L}\\s.'-]*)\\s+(\\d+)'", 'gu');
   let m;
   while ((m = re.exec(raw)) !== null) {
     const name = m[1].trim();
@@ -243,14 +244,22 @@ export async function syncScores() {
     console.warn('⚠️  API primária falhou:', primaryResult.reason.message);
   }
 
-  // Mescla football-data.org: sobrescreve jogos que ela conhece (ao vivo/encerrado)
+  // Mescla football-data.org: sobrescreve jogos que ela conhece (ao vivo/encerrado).
+  // Goleadores da fonte primária são preservados quando football-data.org não fornece.
   if (fdResult.status === 'fulfilled') {
     const fdGames = parseFootballData(fdResult.value);
     if (fdGames.length) {
       const fdKey = (h, a) => `${h.toLowerCase()}|${a.toLowerCase()}`;
       const fdMap = new Map(fdGames.map((g) => [fdKey(g.home, g.away), g]));
-      // Substitui entradas da primária pelos dados da football-data.org
-      games = games.map((g) => fdMap.get(fdKey(g.home, g.away)) ?? g);
+      games = games.map((g) => {
+        const fd = fdMap.get(fdKey(g.home, g.away));
+        if (!fd) return g;
+        return {
+          ...fd,
+          homeScorers: fd.homeScorers?.length ? fd.homeScorers : g.homeScorers,
+          awayScorers: fd.awayScorers?.length ? fd.awayScorers : g.awayScorers,
+        };
+      });
       // Adiciona jogos que só a football-data.org conhece
       for (const [k, g] of fdMap) {
         if (!games.some((pg) => fdKey(pg.home, pg.away) === k)) games.push(g);
@@ -271,10 +280,9 @@ export async function syncScores() {
     }
   }
 
-  // Atualiza status por tempo mesmo se nenhuma API respondeu
-  await updateMatchStatuses();
-
   if (!games.length) {
+    // Atualiza status por tempo mesmo sem dados da API
+    await updateMatchStatuses();
     console.log('ℹ️  Nenhum jogo retornado pelas APIs.');
     return { updated: 0, source: null };
   }
@@ -282,7 +290,7 @@ export async function syncScores() {
   // Mapa name_en (lowercase) → match. Carrega jogos do banco.
   const [matches] = await pool.query(
     `SELECT m.id, m.group_id, m.home_score, m.away_score, m.status, m.result_source,
-            m.live_minute,
+            m.live_minute, m.home_scorers, m.away_scorers,
             t1.name_en AS home_en, t2.name_en AS away_en
      FROM matches m
      JOIN teams t1 ON t1.id = m.home_team_id
@@ -312,19 +320,23 @@ export async function syncScores() {
     // Não sobrescrever resultado inserido manualmente
     if (m.result_source === 'manual') continue;
 
-    // Só atualiza se placar, status ou minuto mudou
     const newStatus = g.finished ? 'finished' : g.paused ? 'paused' : 'live';
     const newMinute = g.finished ? null : (g.minute ?? null);
     const newInjury = g.finished ? null : (g.injuryTime ?? null);
+    const newHomeScorers = g.homeScorers?.length ? JSON.stringify(g.homeScorers) : null;
+    const newAwayScorers = g.awayScorers?.length ? JSON.stringify(g.awayScorers) : null;
+
+    // Pula se placar, status, minuto e goleadores já estão atualizados
+    const scorersUnchanged =
+      (newHomeScorers == null || m.home_scorers != null) &&
+      (newAwayScorers == null || m.away_scorers != null);
     if (
       m.home_score === g.homeScore &&
       m.away_score === g.awayScore &&
       m.status === newStatus &&
-      m.live_minute === newMinute
+      m.live_minute === newMinute &&
+      scorersUnchanged
     ) continue;
-
-    const newHomeScorers = g.homeScorers?.length ? JSON.stringify(g.homeScorers) : null;
-    const newAwayScorers = g.awayScorers?.length ? JSON.stringify(g.awayScorers) : null;
 
     await pool.query(
       `UPDATE matches
@@ -347,6 +359,9 @@ export async function syncScores() {
     });
     updated++;
   }
+
+  // Timer tem a palavra final: garante que jogos com 4h+ não sejam revertidos para 'live' pela API
+  await updateMatchStatuses();
 
   if (updated > 0) {
     broadcast('ranking', {});

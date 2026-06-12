@@ -1,15 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import { MatchesAPI, PredictionsAPI } from '../api/client.js';
-
-function parseScorers(raw) {
-  if (!raw) return [];
-  try { return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return []; }
-}
 import { useAuth } from '../auth/AuthContext.jsx';
 import ScoreInput from '../components/ScoreInput.jsx';
 import CountdownTimer from '../components/CountdownTimer.jsx';
 import { formatLocal, isToday } from '../utils/datetime.js';
 import { useSSE } from '../hooks/useSSE.js';
+
+function parseScorers(raw) {
+  if (!raw) return [];
+  try { return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return []; }
+}
+
+function matchOutcome(h, a) {
+  return h > a ? 'home' : h < a ? 'away' : 'draw';
+}
 
 const GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
 
@@ -40,7 +44,7 @@ export default function Predictions() {
     loadPredictors();
   }, [group]);
 
-  // SSE: atualiza predictors em tempo real quando alguém aposta
+  // SSE: atualiza predictors e placares em tempo real
   useSSE({
     prediction(data) {
       if (data.group_id !== group) return;
@@ -52,6 +56,22 @@ export default function Predictions() {
           : [...list, data];
         return { ...prev, [data.match_id]: updated };
       });
+    },
+    result(data) {
+      if (data.group_id !== group) return;
+      setMatches((prev) =>
+        prev.map((m) =>
+          m.id === data.match_id
+            ? {
+                ...m,
+                home_score: data.home_score ?? m.home_score,
+                away_score: data.away_score ?? m.away_score,
+                status: data.status ?? m.status,
+                live_minute: data.live_minute ?? m.live_minute,
+              }
+            : m
+        )
+      );
     },
   });
 
@@ -195,6 +215,11 @@ export default function Predictions() {
                   savedPred &&
                   savedPred.home === m.home_score &&
                   savedPred.away === m.away_score;
+                const correctOutcome =
+                  hasResult &&
+                  savedPred &&
+                  !exact &&
+                  matchOutcome(savedPred.home, savedPred.away) === matchOutcome(m.home_score, m.away_score);
                 const today = isToday(m.kick_off_utc);
 
                 return (
@@ -210,8 +235,8 @@ export default function Predictions() {
                         {today && <span className="ml-1 text-gold">· Hoje</span>}
                       </span>
                       {m.locked ? (
-                        <span className="text-danger">
-                          {m.status === 'live' ? '🔴 AO VIVO' : m.status === 'paused' ? '⏸ PAUSADO' : '🔒 BLOQUEADO'}
+                        <span className={m.status === 'finished' ? 'text-ok' : 'text-danger'}>
+                          {m.status === 'live' ? '🔴 AO VIVO' : m.status === 'paused' ? '⏸ PAUSADO' : m.status === 'finished' ? '✓ ENCERRADO' : '🔒 BLOQUEADO'}
                         </span>
                       ) : (
                         <CountdownTimer kickoff={m.kick_off_utc} />
@@ -224,13 +249,21 @@ export default function Predictions() {
                         <span className="text-2xl">{m.home_flag}</span>
                       </div>
 
-                      <ScoreInput
-                        home={p.home ?? ''}
-                        away={p.away ?? ''}
-                        onHome={(v) => setScore(m.id, 'home', v)}
-                        onAway={(v) => setScore(m.id, 'away', v)}
-                        disabled={m.locked}
-                      />
+                      {hasResult ? (
+                        <div className="px-3 text-center">
+                          <div className="font-display text-xl font-bold text-gold tabular-nums">
+                            {m.home_score} × {m.away_score}
+                          </div>
+                        </div>
+                      ) : (
+                        <ScoreInput
+                          home={p.home ?? ''}
+                          away={p.away ?? ''}
+                          onHome={(v) => setScore(m.id, 'home', v)}
+                          onAway={(v) => setScore(m.id, 'away', v)}
+                          disabled={m.locked}
+                        />
+                      )}
 
                       <div className="flex flex-1 items-center gap-2">
                         <span className="text-2xl">{m.away_flag}</span>
@@ -240,15 +273,20 @@ export default function Predictions() {
 
                     {hasResult && (
                       <div className="mt-2 text-center text-sm">
-                        <span className="text-ink-mut">
-                          Real: {m.home_score} × {m.away_score}
-                        </span>{' '}
-                        {savedPred &&
-                          (exact ? (
-                            <span className="text-ok font-bold">✓ +3</span>
-                          ) : (
-                            <span className="text-danger font-bold">✗</span>
-                          ))}
+                        {savedPred ? (
+                          <span className="text-ink-mut">
+                            Palpite: {savedPred.home} × {savedPred.away}{' '}
+                            {exact ? (
+                              <span className="text-ok font-bold">✓ +3</span>
+                            ) : correctOutcome ? (
+                              <span className="text-yellow-400 font-bold">✓ +1</span>
+                            ) : (
+                              <span className="text-danger font-bold">✗</span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="text-ink-dim">Sem palpite</span>
+                        )}
                       </div>
                     )}
                     {(() => {

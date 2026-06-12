@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import pool from '../config/database.js';
-import { syncScores } from '../services/scoresFetcher.js';
+import { syncScores, syncScoresOnLogin } from '../services/scoresFetcher.js';
 
 const router = Router();
 
@@ -58,10 +58,10 @@ router.get('/acertadores', async (req, res) => {
   }
 });
 
-// POST /api/results/sync  → trigger manual de busca na API
+// POST /api/results/sync  → trigger manual de busca na API (com mutex, evita concorrência)
 router.post('/sync', async (_req, res) => {
   try {
-    const result = await syncScores();
+    const result = await syncScoresOnLogin();
     res.json({ ok: true, ...result });
   } catch (err) {
     console.error(err);

@@ -52,6 +52,12 @@ router.post('/login', async (req, res) => {
             message: 'Este login está vinculado a outro dispositivo. Fale com o administrador para liberar o acesso.',
           });
         }
+      } else if (user.device_fingerprint) {
+        // Conta já tem dispositivo registrado mas nenhum fingerprint foi enviado — bloqueia
+        return res.status(403).json({
+          error: 'Dispositivo não autorizado',
+          message: 'Não foi possível verificar o dispositivo. Fale com o administrador para liberar o acesso.',
+        });
       }
     }
 

@@ -12,8 +12,12 @@ const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-  charset: 'utf8mb4',
   timezone: 'Z', // armazenamos/comparamos tudo em UTC
+});
+
+// Garante charset correto em cada conexão nova do pool
+pool.on('connection', (conn) => {
+  conn.query("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci");
 });
 
 export async function testConnection() {

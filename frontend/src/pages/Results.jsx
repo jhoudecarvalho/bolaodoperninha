@@ -4,6 +4,11 @@ import { useAuth } from '../auth/AuthContext.jsx';
 import { formatLocal } from '../utils/datetime.js';
 import { useSSE } from '../hooks/useSSE.js';
 
+function parseScorers(raw) {
+  if (!raw) return [];
+  try { return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return []; }
+}
+
 const GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
 
 export default function Results() {
@@ -169,20 +174,25 @@ export default function Results() {
               </div>
 
               {/* Gols */}
-              {hasResult && (m.home_scorers?.length > 0 || m.away_scorers?.length > 0) && (
-                <div className="mt-2 flex justify-between text-xs text-ink-mut">
-                  <div className="space-y-0.5">
-                    {(m.home_scorers || []).map((s, i) => (
-                      <div key={i}>⚽ {s.name} <span className="text-gold">{s.minute}'</span></div>
-                    ))}
+              {hasResult && (() => {
+                const hs = parseScorers(m.home_scorers);
+                const as = parseScorers(m.away_scorers);
+                if (!hs.length && !as.length) return null;
+                return (
+                  <div className="mt-2 flex justify-between text-xs text-ink-mut">
+                    <div className="space-y-0.5">
+                      {hs.map((s, i) => (
+                        <div key={i}>⚽ {s.name} <span className="text-gold">{s.minute}'</span></div>
+                      ))}
+                    </div>
+                    <div className="space-y-0.5 text-right">
+                      {as.map((s, i) => (
+                        <div key={i}><span className="text-gold">{s.minute}'</span> {s.name} ⚽</div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="space-y-0.5 text-right">
-                    {(m.away_scorers || []).map((s, i) => (
-                      <div key={i}><span className="text-gold">{s.minute}'</span> {s.name} ⚽</div>
-                    ))}
-                  </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Acertadores / acertando agora */}
               {hasResult && (() => {

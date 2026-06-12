@@ -5,6 +5,11 @@ import CountdownTimer from './CountdownTimer.jsx';
 import MatchTimer from './MatchTimer.jsx';
 import ScoreInput from './ScoreInput.jsx';
 
+function parseScorers(raw) {
+  if (!raw) return [];
+  try { return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return []; }
+}
+
 function StatusBadge({ match }) {
   if (match.status === 'live') {
     return (
@@ -161,20 +166,25 @@ export default function MatchCard({
         </div>
       </div>
 
-      {hasResult && (match.home_scorers?.length > 0 || match.away_scorers?.length > 0) && (
-        <div className="mt-2 flex justify-between text-xs text-ink-mut">
-          <div className="space-y-0.5">
-            {(match.home_scorers || []).map((s, i) => (
-              <div key={i}>⚽ {s.name} <span className="text-gold">{s.minute}'</span></div>
-            ))}
+      {hasResult && (() => {
+        const hs = parseScorers(match.home_scorers);
+        const as = parseScorers(match.away_scorers);
+        if (!hs.length && !as.length) return null;
+        return (
+          <div className="mt-2 flex justify-between text-xs text-ink-mut">
+            <div className="space-y-0.5">
+              {hs.map((s, i) => (
+                <div key={i}>⚽ {s.name} <span className="text-gold">{s.minute}'</span></div>
+              ))}
+            </div>
+            <div className="space-y-0.5 text-right">
+              {as.map((s, i) => (
+                <div key={i}><span className="text-gold">{s.minute}'</span> {s.name} ⚽</div>
+              ))}
+            </div>
           </div>
-          <div className="space-y-0.5 text-right">
-            {(match.away_scorers || []).map((s, i) => (
-              <div key={i}><span className="text-gold">{s.minute}'</span> {s.name} ⚽</div>
-            ))}
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
       {hasResult && match.result_source === 'api' && (
         <div className="mt-2 text-right">

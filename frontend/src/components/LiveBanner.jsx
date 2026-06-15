@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+import { PredictionsAPI } from '../api/client.js';
 import MatchTimer from './MatchTimer.jsx';
 
 function parseScorers(raw) {
@@ -5,7 +7,23 @@ function parseScorers(raw) {
   try { return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return []; }
 }
 
+function liveOutcome(h, a) {
+  return h > a ? 'home' : h < a ? 'away' : 'draw';
+}
+
 export default function LiveBanner({ matches = [] }) {
+  const [predsByMatch, setPredsByMatch] = useState({});
+
+  const matchIds = matches.map((m) => m.id).join(',');
+  useEffect(() => {
+    if (!matches.length) return;
+    matches.forEach((m) => {
+      PredictionsAPI.byMatch(m.id)
+        .then((list) => setPredsByMatch((prev) => ({ ...prev, [m.id]: list })))
+        .catch(() => {});
+    });
+  }, [matchIds]);
+
   if (!matches.length) return null;
 
   const allPaused = matches.every((m) => m.status === 'paused');
@@ -63,6 +81,63 @@ export default function LiveBanner({ matches = [] }) {
                       <span key={i}>{s.minute}' {s.name} ⚽</span>
                     ))}
                   </div>
+                </div>
+              );
+            })()}
+
+            {/* Apostas ao vivo */}
+            {(() => {
+              const preds = (predsByMatch[m.id] || []).filter((p) => p.home_score != null);
+              if (!preds.length) return null;
+
+              const liveH = m.home_score ?? 0;
+              const liveA = m.away_score ?? 0;
+              const curOutcome = liveOutcome(liveH, liveA);
+
+              const exact   = preds.filter((p) => p.home_score === liveH && p.away_score === liveA);
+              const ahead   = preds.filter((p) => {
+                if (p.home_score === liveH && p.away_score === liveA) return false;
+                return liveOutcome(p.home_score, p.away_score) === curOutcome;
+              });
+              const losing  = preds.filter((p) => {
+                if (p.home_score === liveH && p.away_score === liveA) return false;
+                return liveOutcome(p.home_score, p.away_score) !== curOutcome;
+              });
+
+              return (
+                <div className="mt-2 border-t border-white/10 pt-2 space-y-1">
+                  {exact.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {exact.map((p) => (
+                        <span key={p.player_id} className="inline-flex items-center gap-1 rounded-full bg-gold/20 px-2 py-0.5 text-xs font-medium text-gold ring-1 ring-gold/40">
+                          🥇 {p.player_name}
+                          <b className="tabular-nums">{p.home_score}×{p.away_score}</b>
+                          <b>+3</b>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {ahead.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {ahead.map((p) => (
+                        <span key={p.player_id} className="inline-flex items-center gap-1 rounded-full bg-yellow-400/15 px-2 py-0.5 text-xs text-yellow-300 ring-1 ring-yellow-400/30">
+                          🟡 {p.player_name}
+                          <b className="tabular-nums">{p.home_score}×{p.away_score}</b>
+                          <b>+1</b>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {losing.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {losing.map((p) => (
+                        <span key={p.player_id} className="inline-flex items-center gap-1 rounded-full bg-bg-900/80 px-2 py-0.5 text-xs text-ink-dim">
+                          ❌ {p.player_name}
+                          <b className="tabular-nums">{p.home_score}×{p.away_score}</b>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })()}

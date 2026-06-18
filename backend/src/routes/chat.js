@@ -11,7 +11,7 @@ async function getPlayerRank(playerId) {
   try {
     const [rows] = await pool.query(
       `SELECT player_id,
-              ROW_NUMBER() OVER (ORDER BY pontos DESC, acertos_exatos DESC, player_name ASC) AS rank
+              ROW_NUMBER() OVER (ORDER BY pontos DESC, acertos_exatos DESC, player_name ASC) AS \`rank\`
        FROM ranking_view`
     );
     const found = rows.find((r) => r.player_id === playerId);
@@ -27,11 +27,11 @@ router.get('/', async (_req, res) => {
     const [rows] = await pool.query(
       `WITH ranked AS (
          SELECT player_id,
-                ROW_NUMBER() OVER (ORDER BY pontos DESC, acertos_exatos DESC, player_name ASC) AS rank
+                ROW_NUMBER() OVER (ORDER BY pontos DESC, acertos_exatos DESC, player_name ASC) AS \`rank\`
          FROM ranking_view
        )
        SELECT cm.id, cm.player_name, cm.avatar_color, cm.message, cm.created_at,
-              COALESCE(r.rank, 0) AS rank
+              COALESCE(r.\`rank\`, 0) AS \`rank\`
        FROM chat_messages cm
        LEFT JOIN users u ON u.id = cm.user_id
        LEFT JOIN ranked r ON r.player_id = u.player_id

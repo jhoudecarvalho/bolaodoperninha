@@ -6,6 +6,15 @@ function formatTime(dateStr) {
   return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 
+function RankBadge({ rank }) {
+  if (!rank) return null;
+  return (
+    <span className="text-[10px] font-semibold text-gold opacity-80">
+      °{rank}
+    </span>
+  );
+}
+
 export default function ChatBubble() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
@@ -14,12 +23,10 @@ export default function ChatBubble() {
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
 
-  // Scroll para o fim quando chegam mensagens novas e o painel está aberto
   useEffect(() => {
     if (open) bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, open]);
 
-  // Foca o input ao abrir
   useEffect(() => {
     if (open) inputRef.current?.focus();
   }, [open]);
@@ -32,7 +39,7 @@ export default function ChatBubble() {
     try {
       await send(text);
     } catch {
-      setInput(text); // restaura se falhou
+      setInput(text);
     } finally {
       setSending(false);
     }
@@ -56,6 +63,7 @@ export default function ChatBubble() {
             <button
               onClick={() => setOpen(false)}
               className="text-ink-dim hover:text-ink text-lg leading-none"
+              style={{ touchAction: 'manipulation' }}
             >
               ×
             </button>
@@ -79,6 +87,7 @@ export default function ChatBubble() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-baseline gap-1.5 flex-wrap">
                     <span className="text-xs font-semibold text-ink">{msg.player_name}</span>
+                    <RankBadge rank={msg.rank} />
                     <span className="text-[10px] text-ink-dim">{formatTime(msg.created_at)}</span>
                   </div>
                   <p className="text-sm text-ink-mut break-words">{msg.message}</p>
@@ -98,13 +107,14 @@ export default function ChatBubble() {
               onKeyDown={handleKey}
               maxLength={500}
               placeholder="Mensagem..."
-              className="flex-1 bg-bg-900 border border-line rounded-lg px-3 py-1.5 text-base text-ink placeholder-ink-dim focus:outline-none focus:border-gold min-w-0"
+              className="flex-1 bg-bg-900 border border-line rounded-lg px-3 py-1.5 text-ink placeholder-ink-dim focus:outline-none focus:border-gold min-w-0"
               style={{ fontSize: 16 }}
             />
             <button
               onClick={handleSend}
               disabled={!input.trim() || sending}
               className="px-3 py-1.5 rounded-lg bg-gold text-bg-900 text-sm font-semibold disabled:opacity-40 hover:brightness-110 transition"
+              style={{ touchAction: 'manipulation' }}
             >
               ➤
             </button>
@@ -115,13 +125,13 @@ export default function ChatBubble() {
       {/* Botão flutuante */}
       <button
         onClick={() => setOpen((v) => !v)}
-        className="relative h-13 w-13 rounded-full bg-gold text-bg-900 shadow-lg hover:brightness-110 transition flex items-center justify-center text-xl"
+        className="relative rounded-full bg-gold text-bg-900 shadow-lg hover:brightness-110 transition flex items-center justify-center text-xl"
         style={{ width: 52, height: 52, touchAction: 'manipulation' }}
         aria-label="Abrir chat"
       >
         💬
         {unread > 0 && (
-          <span className="absolute -top-1 -right-1 h-5 min-w-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center px-1">
+          <span className="absolute -top-1 -right-1 h-5 min-w-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center px-1 animate-bounce">
             {unread > 9 ? '9+' : unread}
           </span>
         )}

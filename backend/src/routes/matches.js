@@ -20,7 +20,7 @@ router.post('/sync', async (req, res) => {
 
 const BASE_SELECT = `
   SELECT
-    m.id, m.group_id, m.match_date, m.kick_off_utc, m.venue, m.status,
+    m.id, m.group_id, m.stage, m.match_date, m.kick_off_utc, m.venue, m.status,
     m.home_score, m.away_score, m.result_source, m.result_updated_at,
     m.live_minute, m.live_injury_time,
     m.home_scorers, m.away_scorers,
@@ -67,7 +67,7 @@ router.get('/', async (req, res) => {
 // GET /api/matches/upcoming?limit=10
 router.get('/upcoming', async (req, res) => {
   try {
-    const limit = Math.min(Number(req.query.limit) || 10, 72);
+    const limit = Math.min(Number(req.query.limit) || 10, 200);
     const sql =
       BASE_SELECT +
       ' WHERE UTC_TIMESTAMP() < m.kick_off_utc ORDER BY m.kick_off_utc ASC LIMIT ?';

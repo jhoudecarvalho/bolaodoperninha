@@ -5,6 +5,21 @@ import CountdownTimer from './CountdownTimer.jsx';
 import MatchTimer from './MatchTimer.jsx';
 import ScoreInput from './ScoreInput.jsx';
 
+const STAGE_LABELS = {
+  GROUP_STAGE:    (g) => g ? `Grupo ${g}` : 'Fase de Grupos',
+  LAST_32:        () => 'Rodada de 32',
+  LAST_16:        () => 'Oitavas de Final',
+  QUARTER_FINALS: () => 'Quartas de Final',
+  SEMI_FINALS:    () => 'Semifinal',
+  THIRD_PLACE:    () => '3º Lugar',
+  FINAL:          () => 'Final',
+};
+
+function stageLabel(stage) {
+  const fn = STAGE_LABELS[stage] ?? STAGE_LABELS.GROUP_STAGE;
+  return fn();
+}
+
 function parseScorers(raw) {
   if (!raw) return [];
   try { return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return []; }
@@ -128,7 +143,7 @@ export default function MatchCard({
     <div className={`card ${borderClass} p-4 animate-slideUp`}>
       <div className="mb-2 flex items-center justify-between text-xs text-ink-mut">
         <span>
-          Grupo {match.group_id} · {formatLocal(match.kick_off_utc)}
+          {match.group_id ? `Grupo ${match.group_id}` : stageLabel(match.stage)} · {formatLocal(match.kick_off_utc)}
           {today && <span className="ml-1 text-gold">· Hoje</span>}
         </span>
         <div className="flex items-center gap-2">

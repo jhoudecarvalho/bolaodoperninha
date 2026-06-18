@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 
 import { testConnection } from './config/database.js';
 import { startScoresSync } from './services/scoresFetcher.js';
+import { startKnockoutSync } from './services/knockoutImporter.js';
 import { requireAuth } from './middleware/auth.js';
 
 import authRouter from './routes/auth.js';
@@ -71,8 +72,9 @@ async function start() {
     console.log(`🚀 Backend rodando em http://localhost:${PORT}`);
   });
 
-  // Inicia sincronização periódica de placares
+  // Inicia sincronização periódica de placares e importação do mata-mata
   startScoresSync();
+  startKnockoutSync();
 }
 
 start();

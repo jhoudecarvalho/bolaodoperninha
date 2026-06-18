@@ -36,11 +36,13 @@ CREATE TABLE teams (
 );
 
 -- ==========================================
--- TABELA: matches (72 jogos fase de grupos)
+-- TABELA: matches (fase de grupos + mata-mata)
 -- ==========================================
 CREATE TABLE matches (
   id INT AUTO_INCREMENT PRIMARY KEY,
-  group_id CHAR(1) NOT NULL,
+  group_id CHAR(1) NULL,
+  stage VARCHAR(20) NOT NULL DEFAULT 'GROUP_STAGE',
+  fd_match_id INT NULL UNIQUE,
   home_team_id INT NOT NULL,
   away_team_id INT NOT NULL,
   match_date DATE NOT NULL,
@@ -63,7 +65,8 @@ CREATE TABLE matches (
 
   INDEX idx_kickoff (kick_off_utc),
   INDEX idx_status (status),
-  INDEX idx_group (group_id)
+  INDEX idx_group (group_id),
+  INDEX idx_stage (stage)
 );
 
 -- ==========================================

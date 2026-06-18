@@ -1,19 +1,25 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { ChatAPI } from '../api/client.js';
-import { TOKEN_KEY } from '../api/client.js';
+import { ChatAPI, TOKEN_KEY } from '../api/client.js';
 
 export function useChat(open) {
   const [messages, setMessages] = useState([]);
   const [unread, setUnread] = useState(0);
   const loaded = useRef(false);
+  const openRef = useRef(open);
 
+  // Mantém o ref sincronizado sem recriar callbacks
+  useEffect(() => {
+    openRef.current = open;
+  }, [open]);
+
+  // addMessage nunca muda → SSE connection fica estável
   const addMessage = useCallback((msg) => {
     setMessages((prev) => {
       if (prev.some((m) => m.id === msg.id)) return prev;
       return [...prev, msg];
     });
-    if (!open) setUnread((n) => n + 1);
-  }, [open]);
+    if (!openRef.current) setUnread((n) => n + 1);
+  }, []);
 
   // Carrega histórico uma vez
   useEffect(() => {
@@ -27,7 +33,7 @@ export function useChat(open) {
     if (open) setUnread(0);
   }, [open]);
 
-  // SSE — escuta evento chat
+  // SSE estável — só cria uma vez, nunca reconecta por causa do open
   useEffect(() => {
     const token = localStorage.getItem(TOKEN_KEY);
     if (!token) return;
@@ -42,7 +48,6 @@ export function useChat(open) {
 
   const send = useCallback(async (text) => {
     const msg = await ChatAPI.send(text);
-    // O broadcast SSE já vai adicionar, mas garantimos localmente
     addMessage(msg);
   }, [addMessage]);
 

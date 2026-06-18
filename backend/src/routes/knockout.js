@@ -65,9 +65,57 @@ async function fetchKnockout() {
   return result;
 }
 
-router.get('/', async (_req, res) => {
+router.get('/', async (req, res) => {
   try {
-    res.json(await fetchKnockout());
+    // Clone para não mutar o cache
+    const raw  = await fetchKnockout();
+    const data = JSON.parse(JSON.stringify(raw));
+
+    // Coleta todos os fd_match_id retornados pela API
+    const fdIds = data.stages
+      .flatMap((s) => s.matches.map((m) => m.id))
+      .filter((id) => typeof id === 'number');
+
+    if (fdIds.length > 0) {
+      const [dbRows] = await pool.query(
+        `SELECT fd_match_id, id AS db_id,
+                (UTC_TIMESTAMP() >= kick_off_utc) AS is_locked
+         FROM matches WHERE fd_match_id IN (?)`,
+        [fdIds]
+      );
+      const dbMap = new Map(
+        dbRows.map((r) => [r.fd_match_id, { dbId: r.db_id, locked: Boolean(Number(r.is_locked)) }])
+      );
+
+      // Palpites do usuário logado (se houver player_id)
+      const playerId = req.user?.player_id;
+      let predMap = new Map();
+      if (playerId) {
+        const dbIds = dbRows.map((r) => r.db_id);
+        if (dbIds.length > 0) {
+          const [preds] = await pool.query(
+            'SELECT match_id, home_score, away_score FROM predictions WHERE player_id = ? AND match_id IN (?)',
+            [playerId, dbIds]
+          );
+          predMap = new Map(preds.map((p) => [p.match_id, { home: p.home_score, away: p.away_score }]));
+        }
+      }
+
+      // Injeta nas partidas
+      for (const stage of data.stages) {
+        for (const m of stage.matches) {
+          const db = dbMap.get(m.id);
+          if (db) {
+            m.dbMatchId = db.dbId;
+            m.locked    = db.locked;
+            const pred  = predMap.get(db.dbId);
+            if (pred) m.myPrediction = pred;
+          }
+        }
+      }
+    }
+
+    res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

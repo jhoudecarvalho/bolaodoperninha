@@ -1,6 +1,7 @@
 import { Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar.jsx';
 import OnlineBar from './components/OnlineBar.jsx';
+import ChatBubble from './components/ChatBubble.jsx';
 import ProtectedRoute from './auth/ProtectedRoute.jsx';
 import Login from './pages/Login.jsx';
 import Home from './pages/Home.jsx';
@@ -20,6 +21,7 @@ function Layout({ children }) {
       <footer className="border-t border-line py-6 text-center text-xs text-ink-dim">
         🏆 Bolão Copa do Mundo FIFA 2026 · 3 pontos por placar exato
       </footer>
+      <ChatBubble />
     </div>
   );
 }

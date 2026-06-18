@@ -306,6 +306,24 @@ export async function syncScores() {
     const m = index.get(key(g.home, g.away));
     if (!m) continue;
 
+    // API retractou um finished=TRUE falso: volta para scheduled e limpa o placar injetado
+    if (!g.finished && !g.paused && g.homeScore == null &&
+        (m.status === 'live' || m.status === 'finished') &&
+        m.home_score === 0 && m.away_score === 0 &&
+        !m.home_scorers && !m.away_scorers &&
+        m.result_source === 'api') {
+      await pool.query(
+        `UPDATE matches SET status='scheduled', home_score=NULL, away_score=NULL,
+                result_source=NULL, result_updated_at=NULL,
+                live_minute=NULL, live_injury_time=NULL WHERE id=?`,
+        [m.id]
+      );
+      console.log(`↩️  Match ${m.id} revertido para scheduled (API corrigiu falso finished)`);
+      broadcast('result', { match_id: m.id, group_id: m.group_id, status: 'scheduled', home_score: null, away_score: null });
+      updated++;
+      continue;
+    }
+
     // Se a API ainda não reportou placar mas o jogo já está live no banco,
     // aceita 0×0 para exibir corretamente (API lenta a atualizar time_elapsed).
     if (g.homeScore == null || g.awayScore == null) {

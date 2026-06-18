@@ -16,6 +16,7 @@ import rankingRouter from './routes/ranking.js';
 import standingsRouter from './routes/standings.js';
 import sseRouter from './routes/sse.js';
 import seenRouter from './routes/seen.js';
+import chatRouter from './routes/chat.js';
 
 dotenv.config();
 
@@ -49,6 +50,7 @@ app.use('/api/results', requireAuth, resultsRouter);
 app.use('/api/ranking', requireAuth, rankingRouter);
 app.use('/api/standings', requireAuth, standingsRouter);
 app.use('/api/seen', requireAuth, seenRouter);
+app.use('/api/chat', requireAuth, chatRouter);
 
 // 404
 app.use((req, res) => {

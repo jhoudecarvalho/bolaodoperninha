@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { TOKEN_KEY } from '../api/client.js';
 
-const SSE_EVENTS = ['prediction', 'result', 'ranking', 'online'];
+const SSE_EVENTS = ['prediction', 'result', 'ranking', 'online', 'chat'];
 
 /**
  * Conecta ao endpoint SSE e chama handlers quando chegam eventos.

@@ -7,6 +7,7 @@ USE bolao_copa2026;
 -- então desabilitamos a checagem de FK durante os DROPs.
 SET FOREIGN_KEY_CHECKS = 0;
 DROP VIEW  IF EXISTS ranking_view;
+DROP TABLE IF EXISTS chat_messages;
 DROP TABLE IF EXISTS predictions;
 DROP TABLE IF EXISTS matches;
 DROP TABLE IF EXISTS teams;
@@ -114,6 +115,19 @@ CREATE TABLE predictions (
 
   UNIQUE KEY uq_player_match (player_id, match_id)
 );
+
+-- ==========================================
+-- TABELA: chat_messages
+-- ==========================================
+CREATE TABLE chat_messages (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  player_name VARCHAR(30) NOT NULL,
+  avatar_color VARCHAR(7) NOT NULL DEFAULT '#c8aa6e',
+  message TEXT NOT NULL,
+  created_at DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+  INDEX idx_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==========================================
 -- VIEW: ranking calculado automaticamente

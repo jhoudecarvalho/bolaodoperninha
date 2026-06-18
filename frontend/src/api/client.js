@@ -88,3 +88,8 @@ export const StandingsAPI = {
   groups: () => api.get('/standings').then((r) => r.data),
   scorers: () => api.get('/standings/scorers').then((r) => r.data),
 };
+
+export const ChatAPI = {
+  history: () => api.get('/chat').then((r) => r.data),
+  send: (message) => api.post('/chat', { message }).then((r) => r.data),
+};

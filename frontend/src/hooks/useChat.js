@@ -6,27 +6,33 @@ export function useChat(open) {
   const [unread, setUnread] = useState(0);
   const loaded = useRef(false);
   const openRef = useRef(open);
+  const knownIds = useRef(new Set());
 
-  // Mantém o ref sincronizado sem recriar callbacks
   useEffect(() => {
     openRef.current = open;
   }, [open]);
 
-  // addMessage nunca muda → SSE connection fica estável
   const addMessage = useCallback((msg) => {
-    setMessages((prev) => {
-      if (prev.some((m) => m.id === msg.id)) return prev;
-      // só incrementa quando a mensagem é de fato nova
-      if (!openRef.current) setUnread((n) => n + 1);
-      return [...prev, msg];
-    });
+    // Deduplicação via Set — rápida e sem chamar setState dentro de updater
+    if (knownIds.current.has(msg.id)) return;
+    knownIds.current.add(msg.id);
+
+    setMessages((prev) => [...prev, msg]);
+
+    // setState fora do updater — seguro e confiável
+    if (!openRef.current) setUnread((n) => n + 1);
   }, []);
 
-  // Carrega histórico uma vez
+  // Carrega histórico e popula o Set de IDs conhecidos
   useEffect(() => {
     if (loaded.current) return;
     loaded.current = true;
-    ChatAPI.history().then(setMessages).catch(() => {});
+    ChatAPI.history()
+      .then((msgs) => {
+        msgs.forEach((m) => knownIds.current.add(m.id));
+        setMessages(msgs);
+      })
+      .catch(() => {});
   }, []);
 
   // Zera unread quando abre
@@ -34,7 +40,7 @@ export function useChat(open) {
     if (open) setUnread(0);
   }, [open]);
 
-  // SSE estável — só cria uma vez, nunca reconecta por causa do open
+  // SSE estável — criado uma vez, nunca reconecta por causa do open
   useEffect(() => {
     const token = localStorage.getItem(TOKEN_KEY);
     if (!token) return;

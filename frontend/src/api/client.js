@@ -89,6 +89,10 @@ export const StandingsAPI = {
   scorers: () => api.get('/standings/scorers').then((r) => r.data),
 };
 
+export const KnockoutAPI = {
+  get: () => api.get('/knockout').then((r) => r.data),
+};
+
 export const ChatAPI = {
   history: () => api.get('/chat').then((r) => r.data),
   send: (message) => api.post('/chat', { message }).then((r) => r.data),

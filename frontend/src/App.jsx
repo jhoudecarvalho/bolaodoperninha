@@ -11,6 +11,7 @@ import Results from './pages/Results.jsx';
 import Ranking from './pages/Ranking.jsx';
 import Detail from './pages/Detail.jsx';
 import Standings from './pages/Standings.jsx';
+import Finais from './pages/Finais.jsx';
 
 function Layout({ children }) {
   return (
@@ -43,6 +44,7 @@ export default function App() {
                 <Route path="/ranking" element={<Ranking />} />
                 <Route path="/detalhes" element={<Detail />} />
                 <Route path="/classificacao" element={<Standings />} />
+                <Route path="/finais" element={<Finais />} />
               </Routes>
             </Layout>
           </ProtectedRoute>

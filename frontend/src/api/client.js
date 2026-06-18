@@ -90,7 +90,8 @@ export const StandingsAPI = {
 };
 
 export const KnockoutAPI = {
-  get: () => api.get('/knockout').then((r) => r.data),
+  get:        () => api.get('/knockout').then((r) => r.data),
+  projection: () => api.get('/knockout/projection').then((r) => r.data),
 };
 
 export const ChatAPI = {

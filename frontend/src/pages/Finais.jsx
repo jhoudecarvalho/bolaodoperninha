@@ -1,210 +1,232 @@
 import { useEffect, useRef, useState } from 'react';
 import { KnockoutAPI } from '../api/client.js';
 
-const STAGE_STYLE = {
-  LAST_32:        { color: '#6366f1', bg: 'rgba(99,102,241,0.1)',  emoji: '32' },
-  LAST_16:        { color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)',  emoji: '16' },
-  QUARTER_FINALS: { color: '#f59e0b', bg: 'rgba(245,158,11,0.1)',  emoji: '⚔️' },
-  SEMI_FINALS:    { color: '#ef4444', bg: 'rgba(239,68,68,0.1)',    emoji: '🔥' },
-  THIRD_PLACE:    { color: '#6b7280', bg: 'rgba(107,114,128,0.1)', emoji: '🥉' },
-  FINAL:          { color: '#c8aa6e', bg: 'rgba(200,170,110,0.15)', emoji: '🏆' },
-};
+// ─── Dimensões do bracket ────────────────────────────────────────────────────
+const MH   = 72;   // match height (slot em LAST_16)
+const CW   = 90;   // column width por fase
+const CN   = 20;   // connector width
+const FW   = 112;  // final card width
 
-function formatDate(utcDate) {
-  const d = new Date(utcDate);
-  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', weekday: 'short' });
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+function fill(arr, n) {
+  return [...arr, ...Array(Math.max(0, n - arr.length)).fill(null)];
 }
 
-function formatTime(utcDate) {
-  const d = new Date(utcDate);
-  return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+function shortName(name) {
+  if (!name) return '';
+  if (name.length <= 10) return name;
+  return name.slice(0, 9) + '…';
 }
 
-function formatCountdown(utcDate) {
-  const diff = new Date(utcDate) - Date.now();
-  if (diff <= 0) return null;
-  const d = Math.floor(diff / 86400000);
-  const h = Math.floor((diff % 86400000) / 3600000);
-  const m = Math.floor((diff % 3600000) / 60000);
-  if (d > 0) return `em ${d}d ${h}h`;
-  if (h > 0) return `em ${h}h ${m}m`;
-  return `em ${m}min`;
+function formatDate(utc) {
+  const d = new Date(utc);
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
 }
 
-function TeamSlot({ team, score, isWinner, pending }) {
+// ─── Componentes do bracket ───────────────────────────────────────────────────
+
+function TeamRow({ team, score, won, dim }) {
   return (
-    <div className={`flex items-center gap-2 flex-1 ${isWinner ? 'opacity-100' : score != null ? 'opacity-50' : 'opacity-100'}`}>
+    <div className={`flex items-center gap-1.5 px-2 py-1 ${dim ? 'opacity-40' : ''}`}>
       {team ? (
         <>
-          <span className="text-xl leading-none">{team.flag}</span>
-          <span className={`text-sm font-semibold truncate ${isWinner ? 'text-gold' : 'text-ink'}`}>
-            {team.name}
+          <span className="text-base leading-none shrink-0">{team.flag}</span>
+          <span className={`text-[11px] font-semibold flex-1 truncate ${won ? 'text-gold' : 'text-ink'}`}>
+            {shortName(team.name)}
           </span>
+          {score != null && (
+            <span className={`text-sm font-bold tabular-nums shrink-0 ${won ? 'text-gold' : 'text-ink-mut'}`}>
+              {score}
+            </span>
+          )}
         </>
       ) : (
         <>
-          <span className="h-6 w-6 rounded-full bg-bg-700 border border-line flex items-center justify-center text-[10px] text-ink-dim">?</span>
-          <span className="text-sm text-ink-dim italic">A definir</span>
+          <span className="text-base leading-none shrink-0 opacity-20">⬜</span>
+          <span className="text-[10px] text-ink-dim italic flex-1">A definir</span>
         </>
       )}
     </div>
   );
 }
 
-function MatchCard({ match, stageKey }) {
-  const style = STAGE_STYLE[stageKey] ?? STAGE_STYLE.LAST_32;
-  const isFinal = stageKey === 'FINAL';
-  const isLive = match.status === 'IN_PLAY' || match.status === 'PAUSED';
-  const isFinished = match.status === 'FINISHED';
-  const hasScore = match.homeScore != null && match.awayScore != null;
-  const countdown = !isFinished && !isLive ? formatCountdown(match.utcDate) : null;
+function MatchSlot({ match, slotH, isFinal }) {
+  const isLive     = match?.status === 'IN_PLAY' || match?.status === 'PAUSED';
+  const isFinished = match?.status === 'FINISHED';
+  const homeWon    = match?.winner === 'HOME_TEAM';
+  const awayWon    = match?.winner === 'AWAY_TEAM';
+  const hasScore   = match?.homeScore != null;
 
-  const homeWon = match.winner === 'HOME_TEAM';
-  const awayWon = match.winner === 'AWAY_TEAM';
+  const borderColor = isFinal
+    ? 'rgba(200,170,110,0.7)'
+    : isLive
+    ? 'rgba(239,68,68,0.7)'
+    : 'rgba(50,50,80,0.8)';
+
+  const bg = isFinal
+    ? 'rgba(200,170,110,0.08)'
+    : isLive
+    ? 'rgba(239,68,68,0.05)'
+    : 'rgba(14,14,38,0.9)';
 
   return (
-    <div
-      className={`rounded-xl border overflow-hidden ${isFinal ? 'shadow-lg' : ''}`}
-      style={{
-        borderColor: isLive ? style.color : 'var(--color-line, #1a1a30)',
-        background: isLive ? style.bg : isFinal ? style.bg : 'var(--color-bg-800, #111128)',
-        boxShadow: isLive ? `0 0 0 1px ${style.color}40` : undefined,
-      }}
-    >
-      {/* Data/status header */}
-      <div className="flex items-center justify-between px-3 py-1.5 border-b"
-        style={{ borderColor: 'var(--color-line, #1a1a30)' }}>
-        <span className="text-[11px] text-ink-dim">
-          {formatDate(match.utcDate)} · {formatTime(match.utcDate)}
-        </span>
+    <div style={{ height: slotH, display: 'flex', alignItems: 'center' }}>
+      <div
+        className="w-full rounded overflow-hidden"
+        style={{ border: `1px solid ${borderColor}`, background: bg, margin: '0 2px' }}
+      >
         {isLive && (
-          <span className="flex items-center gap-1 text-[11px] font-bold text-red-400">
+          <div className="flex items-center justify-center gap-1 py-0.5" style={{ background: 'rgba(239,68,68,0.15)' }}>
             <span className="h-1.5 w-1.5 rounded-full bg-red-400 animate-pulse" />
-            AO VIVO
-          </span>
+            <span className="text-[9px] font-bold text-red-400 tracking-wide">AO VIVO</span>
+          </div>
         )}
-        {isFinished && <span className="text-[11px] text-ink-dim">Encerrado</span>}
-        {countdown && <span className="text-[11px] text-ink-dim">{countdown}</span>}
-      </div>
-
-      {/* Confronto */}
-      <div className="px-3 py-3 flex items-center gap-2">
-        <TeamSlot team={match.home} score={match.homeScore} isWinner={homeWon} />
-
-        {/* Placar ou VS */}
-        <div className="flex flex-col items-center shrink-0 min-w-[48px]">
-          {hasScore ? (
-            <div className="flex items-center gap-1">
-              <span className={`text-xl font-bold tabular-nums ${homeWon ? 'text-gold' : 'text-ink'}`}>
-                {match.homeScore}
-              </span>
-              <span className="text-ink-dim text-sm">×</span>
-              <span className={`text-xl font-bold tabular-nums ${awayWon ? 'text-gold' : 'text-ink'}`}>
-                {match.awayScore}
-              </span>
-            </div>
-          ) : (
-            <span className="text-sm font-bold text-ink-dim">×</span>
-          )}
-          {isFinished && match.winner === 'DRAW' && (
-            <span className="text-[10px] text-ink-dim mt-0.5">Prorrogação</span>
-          )}
-        </div>
-
-        {/* Away — invertido (flag à direita) */}
-        <div className={`flex items-center gap-2 flex-1 justify-end ${awayWon ? 'opacity-100' : hasScore ? 'opacity-50' : 'opacity-100'}`}>
-          {match.away ? (
-            <>
-              <span className={`text-sm font-semibold truncate text-right ${awayWon ? 'text-gold' : 'text-ink'}`}>
-                {match.away.name}
-              </span>
-              <span className="text-xl leading-none">{match.away.flag}</span>
-            </>
-          ) : (
-            <>
-              <span className="text-sm text-ink-dim italic">A definir</span>
-              <span className="h-6 w-6 rounded-full bg-bg-700 border border-line flex items-center justify-center text-[10px] text-ink-dim">?</span>
-            </>
-          )}
-        </div>
+        <TeamRow
+          team={match?.home}
+          score={hasScore ? match.homeScore : undefined}
+          won={homeWon}
+          dim={isFinished && awayWon}
+        />
+        <div style={{ borderTop: '1px solid rgba(50,50,80,0.6)', margin: '0 6px' }} />
+        <TeamRow
+          team={match?.away}
+          score={hasScore ? match.awayScore : undefined}
+          won={awayWon}
+          dim={isFinished && homeWon}
+        />
+        {match && !isLive && !isFinished && (
+          <div className="text-center text-[9px] text-ink-dim pb-0.5">
+            {formatDate(match.utcDate)}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function StageSection({ stage, isActive, onSelect }) {
-  const style = STAGE_STYLE[stage.key] ?? STAGE_STYLE.LAST_32;
-  const defined = stage.matches.filter((m) => m.home || m.away).length;
-  const finished = stage.matches.filter((m) => m.status === 'FINISHED').length;
-  const total = stage.matches.length;
+// Conectores SVG entre colunas
+function Connector({ pairCount, matchH, mirrored }) {
+  const totalH = pairCount * 2 * matchH;
+  const midX   = CN / 2;
+  const color  = '#2e2e52';
+
+  const lines = [];
+  for (let i = 0; i < pairCount; i++) {
+    const baseY = i * 2 * matchH;
+    const m1y   = baseY + matchH / 2;
+    const m2y   = baseY + matchH * 3 / 2;
+    const midY  = baseY + matchH;
+    const srcX  = mirrored ? CN : 0;
+    const dstX  = mirrored ? 0 : CN;
+
+    lines.push(
+      <path key={`a${i}`} d={`M ${srcX} ${m1y} H ${midX}`} stroke={color} strokeWidth="1.5" fill="none" />,
+      <path key={`b${i}`} d={`M ${midX} ${m1y} V ${m2y}`} stroke={color} strokeWidth="1.5" fill="none" />,
+      <path key={`c${i}`} d={`M ${srcX} ${m2y} H ${midX}`} stroke={color} strokeWidth="1.5" fill="none" />,
+      <path key={`d${i}`} d={`M ${midX} ${midY} H ${dstX}`} stroke={color} strokeWidth="1.5" fill="none" />,
+    );
+  }
 
   return (
-    <section>
-      {/* Stage header — clicável para fechar/abrir */}
-      <button
-        onClick={onSelect}
-        className="w-full flex items-center justify-between px-4 py-3 rounded-xl mb-3 text-left"
-        style={{ background: style.bg, border: `1px solid ${style.color}40` }}
-      >
-        <div className="flex items-center gap-2">
-          <span className="text-lg">{style.emoji}</span>
-          <div>
-            <p className="font-bold text-sm" style={{ color: style.color }}>{stage.label}</p>
-            <p className="text-[11px] text-ink-dim">
-              {defined === 0
-                ? `${total} jogos · Times a definir`
-                : `${finished}/${total} jogos`}
-            </p>
-          </div>
-        </div>
-        <span className="text-ink-dim text-lg">{isActive ? '▲' : '▼'}</span>
-      </button>
-
-      {isActive && (
-        <div className="space-y-2 mb-6">
-          {stage.matches.length === 0 ? (
-            <p className="text-center text-ink-dim text-sm py-4">Jogos ainda não definidos</p>
-          ) : (
-            stage.matches.map((m) => (
-              <MatchCard key={m.id} match={m} stageKey={stage.key} />
-            ))
-          )}
-        </div>
-      )}
-    </section>
+    <svg width={CN} height={totalH} style={{ display: 'block', flexShrink: 0 }}>
+      {lines}
+    </svg>
   );
 }
 
+function HorzLine({ totalH, mirrored }) {
+  const midY = totalH / 2;
+  const srcX = mirrored ? CN : 0;
+  const dstX = mirrored ? 0 : CN;
+  return (
+    <svg width={CN} height={totalH} style={{ display: 'block', flexShrink: 0 }}>
+      <path d={`M ${srcX} ${midY} H ${dstX}`} stroke="#2e2e52" strokeWidth="1.5" fill="none" />
+    </svg>
+  );
+}
+
+function ColLabel({ label, width }) {
+  return (
+    <div
+      style={{ width, flexShrink: 0 }}
+      className="text-center text-[10px] font-bold text-ink-dim uppercase tracking-wide pb-2"
+    >
+      {label}
+    </div>
+  );
+}
+
+// ─── Seção LAST_32 (lista compacta) ──────────────────────────────────────────
+function R32Section({ matches }) {
+  const [open, setOpen] = useState(false);
+  if (!matches.length) return null;
+
+  const defined = matches.filter(m => m.home || m.away).length;
+
+  return (
+    <div className="rounded-xl border border-line overflow-hidden">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-bg-800 text-left"
+      >
+        <div>
+          <span className="text-sm font-bold text-ink">Rodada de 32</span>
+          <span className="ml-2 text-[11px] text-ink-dim">
+            {defined === 0 ? `${matches.length} jogos · times a definir` : `${defined}/${matches.length} times definidos`}
+          </span>
+        </div>
+        <span className="text-ink-dim">{open ? '▲' : '▼'}</span>
+      </button>
+
+      {open && (
+        <div className="grid grid-cols-2 gap-2 p-3 bg-bg-900/50">
+          {matches.map((m, i) => (
+            <div key={m?.id ?? i} className="rounded border border-line bg-bg-800 overflow-hidden">
+              {m ? (
+                <>
+                  <div className="flex items-center gap-1 px-2 py-1">
+                    <span className="text-sm">{m.home?.flag ?? '⬜'}</span>
+                    <span className="text-[11px] font-medium text-ink truncate flex-1">
+                      {m.home ? shortName(m.home.name) : 'A definir'}
+                    </span>
+                    {m.homeScore != null && <span className="text-xs font-bold text-gold">{m.homeScore}</span>}
+                  </div>
+                  <div style={{ borderTop: '1px solid rgba(50,50,80,0.6)', margin: '0 6px' }} />
+                  <div className="flex items-center gap-1 px-2 py-1">
+                    <span className="text-sm">{m.away?.flag ?? '⬜'}</span>
+                    <span className="text-[11px] font-medium text-ink truncate flex-1">
+                      {m.away ? shortName(m.away.name) : 'A definir'}
+                    </span>
+                    {m.awayScore != null && <span className="text-xs font-bold text-gold">{m.awayScore}</span>}
+                  </div>
+                  <div className="text-center text-[9px] text-ink-dim pb-1">
+                    {formatDate(m.utcDate)}
+                  </div>
+                </>
+              ) : (
+                <div className="px-2 py-3 text-[10px] text-ink-dim text-center italic">A definir</div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Página principal ─────────────────────────────────────────────────────────
 export default function Finais() {
-  const [data, setData] = useState(null);
+  const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [activeStages, setActiveStages] = useState(new Set());
-  const timerRef = useRef(null);
+  const [error, setError]     = useState(null);
+  const scrollRef             = useRef(null);
+  const timerRef              = useRef(null);
 
   async function load() {
     try {
       const d = await KnockoutAPI.get();
       setData(d);
       setError(null);
-
-      // Abre automaticamente fases com jogos ao vivo ou próximos
-      const now = Date.now();
-      const toOpen = new Set();
-      for (const s of d.stages ?? []) {
-        const hasLive = s.matches.some((m) => m.status === 'IN_PLAY' || m.status === 'PAUSED');
-        const hasUpcoming = s.matches.some((m) => {
-          const diff = new Date(m.utcDate) - now;
-          return diff > 0 && diff < 7 * 86400_000; // próximos 7 dias
-        });
-        const allFinished = s.matches.length > 0 && s.matches.every((m) => m.status === 'FINISHED');
-        if (hasLive || hasUpcoming) toOpen.add(s.key);
-        // Mantém aberta a fase mais avançada com algum jogo
-        if (s.matches.some((m) => m.home || m.away) && !allFinished) toOpen.add(s.key);
-      }
-      // Se nada aberto, abre a primeira fase
-      if (toOpen.size === 0 && d.stages?.length) toOpen.add(d.stages[0].key);
-      setActiveStages((prev) => prev.size === 0 ? toOpen : prev);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -218,53 +240,155 @@ export default function Finais() {
     return () => clearInterval(timerRef.current);
   }, []);
 
-  function toggleStage(key) {
-    setActiveStages((prev) => {
-      const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
-      return next;
-    });
-  }
+  // Centraliza o bracket na Final após renderizar
+  useEffect(() => {
+    if (!scrollRef.current) return;
+    const el = scrollRef.current;
+    const center = (el.scrollWidth - el.clientWidth) / 2;
+    el.scrollLeft = center;
+  }, [data]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <span className="text-2xl animate-spin">⚽</span>
-      </div>
-    );
-  }
+  if (loading) return (
+    <div className="flex items-center justify-center py-20">
+      <span className="text-3xl animate-spin">⚽</span>
+    </div>
+  );
 
-  if (error) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-4xl mb-3">😕</p>
-        <p className="text-ink-dim text-sm">{error}</p>
-        <button onClick={load} className="mt-4 px-4 py-2 rounded-lg bg-gold text-bg-900 text-sm font-semibold">
-          Tentar novamente
-        </button>
-      </div>
-    );
-  }
+  if (error) return (
+    <div className="text-center py-12 space-y-3">
+      <p className="text-4xl">😕</p>
+      <p className="text-ink-dim text-sm">{error}</p>
+      <button onClick={load} className="px-4 py-2 rounded-lg bg-gold text-bg-900 text-sm font-semibold">
+        Tentar novamente
+      </button>
+    </div>
+  );
+
+  const getMatches = (key) =>
+    (data?.stages ?? []).find(s => s.key === key)?.matches ?? [];
+
+  const r32  = getMatches('LAST_32');
+  const r16  = getMatches('LAST_16');
+  const qf   = getMatches('QUARTER_FINALS');
+  const sf   = getMatches('SEMI_FINALS');
+  const fin  = getMatches('FINAL')[0] ?? null;
+  const tp   = getMatches('THIRD_PLACE')[0] ?? null;
+
+  const r16L = fill(r16.slice(0, 4), 4);
+  const r16R = fill(r16.slice(4),    4);
+  const qfL  = fill(qf.slice(0, 2),  2);
+  const qfR  = fill(qf.slice(2),     2);
+  const sfL  = fill(sf.slice(0, 1),  1);
+  const sfR  = fill(sf.slice(1),     1);
+
+  const bracketH = 4 * MH;
+  const bracketW = 3 * CW + 3 * CN + FW + 3 * CN + 3 * CW;
 
   return (
-    <div className="space-y-1 max-w-lg mx-auto">
+    <div className="space-y-4 max-w-2xl mx-auto">
       {/* Header */}
-      <div className="text-center mb-6">
-        <h1 className="text-2xl font-bold text-gold font-display">🏆 Mata-Mata</h1>
-        <p className="text-xs text-ink-dim mt-1">
-          Times definidos conforme avançam na fase de grupos
+      <div className="text-center">
+        <h1 className="text-xl font-bold text-gold font-display">🏆 Mata-Mata · Copa 2026</h1>
+        <p className="text-xs text-ink-dim mt-0.5">Times definidos conforme avançam nos grupos</p>
+      </div>
+
+      {/* Rodada de 32 */}
+      <R32Section matches={r32} />
+
+      {/* Bracket principal */}
+      <div
+        ref={scrollRef}
+        className="overflow-x-auto rounded-xl"
+        style={{ WebkitOverflowScrolling: 'touch', background: 'rgba(10,10,28,0.7)', padding: '16px 8px' }}
+      >
+        <div style={{ minWidth: bracketW }}>
+          {/* Labels */}
+          <div className="flex mb-1">
+            <ColLabel label="Oitavas" width={CW} />
+            <div style={{ width: CN, flexShrink: 0 }} />
+            <ColLabel label="Quartas" width={CW} />
+            <div style={{ width: CN, flexShrink: 0 }} />
+            <ColLabel label="Semifinal" width={CW} />
+            <div style={{ width: CN, flexShrink: 0 }} />
+            <ColLabel label="✦ FINAL ✦" width={FW} />
+            <div style={{ width: CN, flexShrink: 0 }} />
+            <ColLabel label="Semifinal" width={CW} />
+            <div style={{ width: CN, flexShrink: 0 }} />
+            <ColLabel label="Quartas" width={CW} />
+            <div style={{ width: CN, flexShrink: 0 }} />
+            <ColLabel label="Oitavas" width={CW} />
+          </div>
+
+          {/* Bracket */}
+          <div style={{ display: 'flex', height: bracketH, alignItems: 'stretch' }}>
+
+            {/* ── Left side ─────────────────────────────── */}
+            {/* R16 Left */}
+            <div style={{ width: CW, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+              {r16L.map((m, i) => <MatchSlot key={i} match={m} slotH={MH} />)}
+            </div>
+
+            <Connector pairCount={2} matchH={MH} />
+
+            {/* QF Left */}
+            <div style={{ width: CW, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+              {qfL.map((m, i) => <MatchSlot key={i} match={m} slotH={MH * 2} />)}
+            </div>
+
+            <Connector pairCount={1} matchH={MH * 2} />
+
+            {/* SF Left */}
+            <div style={{ width: CW, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+              {sfL.map((m, i) => <MatchSlot key={i} match={m} slotH={MH * 4} />)}
+            </div>
+
+            <HorzLine totalH={bracketH} />
+
+            {/* ── Final ─────────────────────────────────── */}
+            <div style={{ width: FW, flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+              <MatchSlot match={fin} slotH={MH * 2} isFinal />
+            </div>
+
+            <HorzLine totalH={bracketH} mirrored />
+
+            {/* ── Right side (espelho) ───────────────────── */}
+            {/* SF Right */}
+            <div style={{ width: CW, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+              {sfR.map((m, i) => <MatchSlot key={i} match={m} slotH={MH * 4} />)}
+            </div>
+
+            <Connector pairCount={1} matchH={MH * 2} mirrored />
+
+            {/* QF Right */}
+            <div style={{ width: CW, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+              {qfR.map((m, i) => <MatchSlot key={i} match={m} slotH={MH * 2} />)}
+            </div>
+
+            <Connector pairCount={2} matchH={MH} mirrored />
+
+            {/* R16 Right */}
+            <div style={{ width: CW, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+              {r16R.map((m, i) => <MatchSlot key={i} match={m} slotH={MH} />)}
+            </div>
+
+          </div>
+        </div>
+
+        {/* Dica de scroll */}
+        <p className="text-center text-[10px] text-ink-dim mt-2 select-none">
+          ← deslize para ver o bracket completo →
         </p>
       </div>
 
-      {/* Fases */}
-      {(data?.stages ?? []).map((stage) => (
-        <StageSection
-          key={stage.key}
-          stage={stage}
-          isActive={activeStages.has(stage.key)}
-          onSelect={() => toggleStage(stage.key)}
-        />
-      ))}
+      {/* 3º lugar */}
+      {tp && (
+        <div className="rounded-xl border border-line p-3 bg-bg-800/50">
+          <p className="text-center text-[11px] font-bold text-ink-dim mb-2">🥉 Disputa de 3º Lugar</p>
+          <div style={{ maxWidth: CW + 20, margin: '0 auto' }}>
+            <MatchSlot match={tp} slotH={MH} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -126,12 +126,23 @@ export default function ChatBubble() {
       <button
         onClick={() => setOpen((v) => !v)}
         className="relative rounded-full bg-gold text-bg-900 shadow-lg hover:brightness-110 transition flex items-center justify-center text-xl"
-        style={{ width: 52, height: 52, touchAction: 'manipulation' }}
+        style={{ width: 52, height: 52, touchAction: 'manipulation', overflow: 'visible' }}
         aria-label="Abrir chat"
       >
         💬
         {unread > 0 && (
-          <span className="absolute -top-1 -right-1 h-5 min-w-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center px-1 animate-bounce">
+          <span
+            className="absolute flex items-center justify-center rounded-full bg-red-500 text-white font-bold ring-2 ring-bg-900"
+            style={{
+              top: -6,
+              right: -6,
+              minWidth: 20,
+              height: 20,
+              fontSize: 11,
+              padding: '0 4px',
+              lineHeight: 1,
+            }}
+          >
             {unread > 9 ? '9+' : unread}
           </span>
         )}

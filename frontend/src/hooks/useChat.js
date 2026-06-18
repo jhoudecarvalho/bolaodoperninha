@@ -16,9 +16,10 @@ export function useChat(open) {
   const addMessage = useCallback((msg) => {
     setMessages((prev) => {
       if (prev.some((m) => m.id === msg.id)) return prev;
+      // só incrementa quando a mensagem é de fato nova
+      if (!openRef.current) setUnread((n) => n + 1);
       return [...prev, msg];
     });
-    if (!openRef.current) setUnread((n) => n + 1);
   }, []);
 
   // Carrega histórico uma vez

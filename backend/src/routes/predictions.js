@@ -63,13 +63,14 @@ router.get('/', async (req, res) => {
     `;
     const [rows] = await pool.query(sql, params);
 
-    // Visão pública (sem filtro de jogador): oculta os placares enquanto o
-    // jogo não começou — assim ninguém vê o palpite alheio antes do apito.
-    // O nome de quem palpitou aparece sempre.
+    // Placar oculto para outros jogadores até o jogo começar (anti-spoiler).
+    // O próprio usuário logado sempre vê seu placar — independente do horário.
     const maskScores = !player_id;
+    const myPlayerId = req.user?.player_id;
     const out = rows.map((r) => {
-      const started = Boolean(Number(r.started));
-      const revealed = started || !maskScores;
+      const started  = Boolean(Number(r.started));
+      const isOwn    = myPlayerId != null && r.player_id === myPlayerId;
+      const revealed = started || !maskScores || isOwn;
       return {
         ...r,
         started,

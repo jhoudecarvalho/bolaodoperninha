@@ -79,12 +79,25 @@ router.get('/', async (req, res) => {
     if (fdIds.length > 0) {
       const [dbRows] = await pool.query(
         `SELECT fd_match_id, id AS db_id,
-                (UTC_TIMESTAMP() >= kick_off_utc) AS is_locked
+                (UTC_TIMESTAMP() >= kick_off_utc) AS is_locked,
+                home_score, away_score, status,
+                live_minute, live_injury_time,
+                home_scorers, away_scorers
          FROM matches WHERE fd_match_id IN (?)`,
         [fdIds]
       );
       const dbMap = new Map(
-        dbRows.map((r) => [r.fd_match_id, { dbId: r.db_id, locked: Boolean(Number(r.is_locked)) }])
+        dbRows.map((r) => [r.fd_match_id, {
+          dbId:         r.db_id,
+          locked:       Boolean(Number(r.is_locked)),
+          homeScore:    r.home_score,
+          awayScore:    r.away_score,
+          status:       r.status,         // scheduled | live | paused | finished
+          liveMinute:   r.live_minute,
+          liveInjury:   r.live_injury_time,
+          homeScorers:  r.home_scorers,
+          awayScorers:  r.away_scorers,
+        }])
       );
 
       // Palpites do usuário logado (se houver player_id)
@@ -101,14 +114,22 @@ router.get('/', async (req, res) => {
         }
       }
 
-      // Injeta nas partidas
+      // Injeta nas partidas — placar/status vêm do banco (atualizado pelo scoresFetcher a cada 2min)
       for (const stage of data.stages) {
         for (const m of stage.matches) {
           const db = dbMap.get(m.id);
           if (db) {
-            m.dbMatchId = db.dbId;
-            m.locked    = db.locked;
-            const pred  = predMap.get(db.dbId);
+            m.dbMatchId   = db.dbId;
+            m.locked      = db.locked;
+            // Sobrescreve placar da API (fullTime) com o do banco (atualizado em tempo real)
+            if (db.homeScore != null) m.homeScore = db.homeScore;
+            if (db.awayScore != null) m.awayScore = db.awayScore;
+            if (db.status)           m.status     = db.status;   // live | paused | finished
+            m.liveMinute  = db.liveMinute ?? null;
+            m.liveInjury  = db.liveInjury ?? null;
+            m.homeScorers = db.homeScorers ? JSON.parse(db.homeScorers) : [];
+            m.awayScorers = db.awayScorers ? JSON.parse(db.awayScorers) : [];
+            const pred    = predMap.get(db.dbId);
             if (pred) m.myPrediction = pred;
           }
         }

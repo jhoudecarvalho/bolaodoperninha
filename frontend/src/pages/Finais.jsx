@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { KnockoutAPI, PredictionsAPI } from '../api/client.js';
 import { useAuth } from '../auth/AuthContext.jsx';
+import { useSSE } from '../hooks/useSSE.js';
 
 // ─── Dimensões do bracket (visual only) ──────────────────────────────────────
 const R32H = 42;
@@ -66,12 +67,13 @@ function PredictCard({ match, playerId, stageKey, onSaved }) {
     }
   }, [match.myPrediction]);
 
-  const isLive     = match.status === 'IN_PLAY' || match.status === 'PAUSED';
-  const isFinished = match.status === 'FINISHED';
-  const homeWon    = match.winner === 'HOME_TEAM';
-  const awayWon    = match.winner === 'AWAY_TEAM';
+  const isLive     = match.status === 'IN_PLAY' || match.status === 'live' || match.status === 'PAUSED' || match.status === 'paused';
+  const isFinished = match.status === 'FINISHED' || match.status === 'finished';
+  const homeWon    = match.winner === 'HOME_TEAM' || (isFinished && match.homeScore != null && match.homeScore > match.awayScore);
+  const awayWon    = match.winner === 'AWAY_TEAM' || (isFinished && match.awayScore != null && match.awayScore > match.homeScore);
   const hasScore   = match.homeScore != null;
   const locked     = match.locked || isFinished;
+  const liveMin    = match.liveMinute != null ? `${match.liveMinute}${match.liveInjury ? '+'+match.liveInjury : ''}'` : null;
 
   const accent = STAGE_COLOR[stageKey] ?? '#c8aa6e';
 
@@ -101,7 +103,7 @@ function PredictCard({ match, playerId, stageKey, onSaved }) {
         {isLive && (
           <div className="flex items-center gap-1 mr-2">
             <span className="h-1.5 w-1.5 rounded-full bg-red-400 animate-pulse" />
-            <span className="text-[10px] font-bold text-red-400">AO VIVO</span>
+            <span className="text-[10px] font-bold text-red-400">AO VIVO{liveMin ? ` · ${liveMin}` : ''}</span>
           </div>
         )}
         <span className="text-[10px] font-semibold" style={{ color: accent }}>
@@ -156,6 +158,22 @@ function PredictCard({ match, playerId, stageKey, onSaved }) {
             )}
           </div>
         </div>
+
+        {/* Goleadores */}
+        {hasScore && ((match.homeScorers?.length > 0) || (match.awayScorers?.length > 0)) && (
+          <div className="flex justify-between mt-2 text-[10px] text-ink-dim">
+            <div className="space-y-0.5">
+              {(match.homeScorers ?? []).map((s, i) => (
+                <div key={i}>⚽ {s.name} <span className="text-gold">{s.minute}'</span></div>
+              ))}
+            </div>
+            <div className="space-y-0.5 text-right">
+              {(match.awayScorers ?? []).map((s, i) => (
+                <div key={i}><span className="text-gold">{s.minute}'</span> {s.name} ⚽</div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Seção de palpite */}
@@ -487,9 +505,12 @@ export default function Finais() {
     try { setData(await KnockoutAPI.get()); } catch {}
   }, []);
 
+  // SSE: atualiza instantaneamente quando scoresFetcher grava placar no banco
+  useSSE({ result: reloadSilent, ranking: reloadSilent });
+
   useEffect(() => {
     load();
-    timerRef.current = setInterval(load, 60_000);
+    timerRef.current = setInterval(load, 120_000); // fallback a cada 2min
     return () => clearInterval(timerRef.current);
   }, []);
 

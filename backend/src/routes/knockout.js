@@ -15,12 +15,11 @@ const STAGES = [
 ];
 const STAGE_KEYS = new Set(STAGES.map((s) => s.key));
 
-let _cache = { data: null, at: 0 };
-const CACHE_TTL_MS = 60_000;
+let _cache    = { data: null, at: 0 };
+let _inFlight = null;
+const CACHE_TTL_MS = 5 * 60_000; // 5 minutos
 
-async function fetchKnockout() {
-  if (_cache.data && Date.now() - _cache.at < CACHE_TTL_MS) return _cache.data;
-
+async function doFetchKnockout() {
   const res = await fetch(FD_URL, {
     headers: { 'X-Auth-Token': FD_TOKEN, 'User-Agent': 'bolao-copa-2026' },
     signal: AbortSignal.timeout(15_000),
@@ -34,28 +33,23 @@ async function fetchKnockout() {
   function enrich(apiTeam) {
     if (!apiTeam?.name) return null;
     const local = teamByEn.get(apiTeam.name.toLowerCase());
-    return {
-      name: local?.name ?? apiTeam.name,
-      flag: local?.flag_emoji ?? '🏳️',
-    };
+    return { name: local?.name ?? apiTeam.name, flag: local?.flag_emoji ?? '🏳️' };
   }
 
   const grouped = Object.fromEntries(STAGES.map((s) => [s.key, []]));
-
   for (const m of data.matches ?? []) {
     if (!STAGE_KEYS.has(m.stage)) continue;
     grouped[m.stage].push({
-      id: m.id,
-      utcDate: m.utcDate,
-      status: m.status,           // TIMED | SCHEDULED | IN_PLAY | PAUSED | FINISHED
-      home: enrich(m.homeTeam),
-      away: enrich(m.awayTeam),
+      id:        m.id,
+      utcDate:   m.utcDate,
+      status:    m.status,
+      home:      enrich(m.homeTeam),
+      away:      enrich(m.awayTeam),
       homeScore: m.score?.fullTime?.home ?? null,
       awayScore: m.score?.fullTime?.away ?? null,
-      winner: m.score?.winner ?? null, // HOME_TEAM | AWAY_TEAM | DRAW
+      winner:    m.score?.winner ?? null,
     });
   }
-
   for (const key of Object.keys(grouped)) {
     grouped[key].sort((a, b) => new Date(a.utcDate) - new Date(b.utcDate));
   }
@@ -63,6 +57,27 @@ async function fetchKnockout() {
   const result = { stages: STAGES.map((s) => ({ ...s, matches: grouped[s.key] })) };
   _cache = { data: result, at: Date.now() };
   return result;
+}
+
+// Stale-while-revalidate: serve cache antigo imediatamente e atualiza em background.
+// Evita timeout no cliente quando a football-data.org demora a responder.
+async function fetchKnockout() {
+  const fresh = _cache.data && Date.now() - _cache.at < CACHE_TTL_MS;
+  if (fresh) return _cache.data;
+
+  if (_cache.data) {
+    // Dado antigo disponível: retorna agora e atualiza em background
+    if (!_inFlight) {
+      _inFlight = doFetchKnockout()
+        .catch((e) => console.warn('⚠️  Knockout background refresh falhou:', e.message))
+        .finally(() => { _inFlight = null; });
+    }
+    return _cache.data;
+  }
+
+  // Primeira carga (sem cache): aguarda — deduplica chamadas concorrentes
+  if (!_inFlight) _inFlight = doFetchKnockout().finally(() => { _inFlight = null; });
+  return _inFlight;
 }
 
 router.get('/', async (req, res) => {

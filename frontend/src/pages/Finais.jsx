@@ -120,9 +120,12 @@ function PredictCard({ match, playerId, stageKey, onSaved }) {
           {/* Casa */}
           <div className={`flex flex-col items-center gap-1 flex-1 ${isFinished && awayWon ? 'opacity-40' : ''}`}>
             <span className="text-3xl leading-none">{match.home?.flag ?? '🏳️'}</span>
-            <span className={`text-xs font-semibold text-center ${homeWon ? 'text-gold' : 'text-ink'}`}>
+            <span className={`text-xs font-semibold text-center leading-tight ${homeWon ? 'text-gold' : 'text-ink'}`}>
               {match.home?.name ?? 'A definir'}
             </span>
+            {match.isProjection && match.homeLabel && (
+              <span className="text-[9px] text-center leading-tight" style={{ color: '#818cf8' }}>{match.homeLabel}</span>
+            )}
           </div>
 
           {/* Placar oficial / VS */}
@@ -137,21 +140,34 @@ function PredictCard({ match, playerId, stageKey, onSaved }) {
             {match.utcDate && !hasScore && (
               <div className="text-[10px] text-ink-dim">{fmtTime(match.utcDate)}</div>
             )}
+            {match.isProjection && (
+              <div className="text-[9px] mt-0.5 font-semibold" style={{ color: '#818cf8' }}>📊 projeção</div>
+            )}
           </div>
 
           {/* Visitante */}
           <div className={`flex flex-col items-center gap-1 flex-1 ${isFinished && homeWon ? 'opacity-40' : ''}`}>
             <span className="text-3xl leading-none">{match.away?.flag ?? '🏳️'}</span>
-            <span className={`text-xs font-semibold text-center ${awayWon ? 'text-gold' : 'text-ink'}`}>
+            <span className={`text-xs font-semibold text-center leading-tight ${awayWon ? 'text-gold' : 'text-ink'}`}>
               {match.away?.name ?? 'A definir'}
             </span>
+            {match.isProjection && match.awayLabel && (
+              <span className="text-[9px] text-center leading-tight" style={{ color: '#818cf8' }}>{match.awayLabel}</span>
+            )}
           </div>
         </div>
       </div>
 
       {/* Seção de palpite */}
       <div className="px-4 pb-3 pt-2 bg-bg-800/40" style={{ borderTop: `1px solid ${accent}20` }}>
-        {locked ? (
+        {/* Sem ID no banco = jogo ainda não foi importado (times indefinidos) */}
+        {!match.dbMatchId ? (
+          <p className="text-center text-xs text-ink-dim py-0.5">
+            {match.isProjection
+              ? <span style={{ color: '#a5b4fc' }}>📊 Palpites abrem quando os times forem confirmados</span>
+              : '⏳ Palpites abrem quando os times forem confirmados'}
+          </p>
+        ) : locked ? (
           <p className="text-center text-xs text-ink-dim">
             {isFinished ? '✓ Encerrado' : '🔒 Palpites encerrados'}
             {saved && <span className="ml-2 text-ok">· Seu palpite: <strong>{h}×{a}</strong></span>}
@@ -207,26 +223,20 @@ function PredictCard({ match, playerId, stageKey, onSaved }) {
 }
 
 // ─── Lista de palpites por fase ───────────────────────────────────────────────
-function PredictList({ stages, playerId, onSaved }) {
-  // Coleta todos os jogos que já têm ID no banco (times definidos)
-  const byStage = stages
-    .map(s => ({
-      key:     s.key,
-      matches: s.matches.filter(m => m.dbMatchId),
-    }))
-    .filter(s => s.matches.length > 0);
+function PredictList({ stages, projection, playerId, onSaved }) {
+  // Mescla projeção nos jogos da R32 que ainda têm times null
+  const projMatches = projection?.matches ?? [];
 
-  if (byStage.length === 0) {
-    return (
-      <div className="rounded-xl border border-line p-6 text-center bg-bg-800/40">
-        <p className="text-2xl mb-2">⏳</p>
-        <p className="text-sm font-semibold text-ink">Jogos do mata-mata ainda não definidos</p>
-        <p className="text-xs text-ink-dim mt-1">
-          Os palpites abrem automaticamente a partir de <strong>28 de junho</strong>, quando as equipes classificadas forem definidas.
-        </p>
-      </div>
-    );
-  }
+  const byStage = stages.map(s => {
+    const matches = s.matches.map((m, i) => {
+      if (s.key === 'LAST_32' && !m.home && !m.away && projMatches[i]) {
+        const p = projMatches[i];
+        return { ...m, home: p.home, homeLabel: p.homeLabel, away: p.away, awayLabel: p.awayLabel, isProjection: true };
+      }
+      return m;
+    });
+    return { key: s.key, matches };
+  }).filter(s => s.matches.length > 0);
 
   return (
     <div className="space-y-6">
@@ -241,9 +251,9 @@ function PredictList({ stages, playerId, onSaved }) {
             <div className="h-px flex-1" style={{ background: `${STAGE_COLOR[key] ?? '#555'}40` }} />
           </div>
           <div className="space-y-3">
-            {matches.map(m => (
+            {matches.map((m, i) => (
               <PredictCard
-                key={m.dbMatchId}
+                key={m.id ?? i}
                 match={m}
                 playerId={playerId}
                 stageKey={key}
@@ -536,7 +546,7 @@ export default function Finais() {
           <span className="text-sm font-bold text-ink">🎯 Seus Palpites</span>
           <div className="h-px flex-1 bg-line" />
         </div>
-        <PredictList stages={stages} playerId={playerId} onSaved={reloadSilent} />
+        <PredictList stages={stages} projection={projection} playerId={playerId} onSaved={reloadSilent} />
       </section>
 
       {/* ══════════════════════════════════════════════════════════════════

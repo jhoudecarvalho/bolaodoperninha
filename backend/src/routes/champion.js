@@ -22,11 +22,33 @@ function ownPlayerOnly(req, res, next) {
   next();
 }
 
-// GET /api/champion — lista todos os participantes com status de escolha.
-// A seleção escolhida só é revelada para o próprio usuário logado.
+// GET /api/champion — participantes + campeão real (se a final já foi jogada).
+// Enquanto a final não ocorre: a seleção de cada um fica oculta para os outros.
+// Após a final: todas as escolhas são reveladas + acertou_campeao é calculado.
 router.get('/', async (req, res) => {
   try {
     const myPlayerId = req.user?.player_id ?? null;
+
+    // Determina o campeão real (se a final terminou)
+    const [[finalMatch]] = await pool.query(`
+      SELECT home_team_id, away_team_id, winner
+      FROM matches
+      WHERE stage = 'FINAL' AND status = 'finished' AND winner IS NOT NULL
+      LIMIT 1
+    `);
+
+    let champion = null;
+    let championTeamId = null;
+    if (finalMatch) {
+      championTeamId = finalMatch.winner === 'home' ? finalMatch.home_team_id : finalMatch.away_team_id;
+      const [[ct]] = await pool.query(
+        'SELECT id AS team_id, name AS team_name, flag_emoji, group_id FROM teams WHERE id = ?',
+        [championTeamId]
+      );
+      if (ct) champion = ct;
+    }
+
+    const tournamentOver = !!champion;
 
     const [players] = await pool.query(
       'SELECT id AS player_id, name AS player_name, avatar_color FROM players ORDER BY name ASC'
@@ -41,23 +63,26 @@ router.get('/', async (req, res) => {
 
     const pickMap = new Map(picks.map((p) => [p.player_id, p]));
 
-    const result = players.map((pl) => {
+    const players_out = players.map((pl) => {
       const pick = pickMap.get(pl.player_id);
       const isOwn = myPlayerId != null && pl.player_id === myPlayerId;
+      // Após a final, revela tudo; antes disso só o próprio vê
+      const reveal = tournamentOver || isOwn;
+      const acertouCampeao = tournamentOver && pick && pick.team_id === championTeamId;
       return {
-        player_id:   pl.player_id,
-        player_name: pl.player_name,
+        player_id:    pl.player_id,
+        player_name:  pl.player_name,
         avatar_color: pl.avatar_color,
-        picked: !!pick,
-        // Revela a seleção apenas para o próprio jogador
-        team_id:    isOwn && pick ? pick.team_id   : null,
-        team_name:  isOwn && pick ? pick.team_name : null,
-        flag_emoji: isOwn && pick ? pick.flag_emoji : null,
-        group_id:   isOwn && pick ? pick.group_id  : null,
+        picked:        !!pick,
+        acertou_campeao: !!acertouCampeao,
+        team_id:    reveal && pick ? pick.team_id    : null,
+        team_name:  reveal && pick ? pick.team_name  : null,
+        flag_emoji: reveal && pick ? pick.flag_emoji : null,
+        group_id:   reveal && pick ? pick.group_id   : null,
       };
     });
 
-    res.json(result);
+    res.json({ champion, players: players_out });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro ao buscar palpites de campeão' });

@@ -100,6 +100,7 @@ export const ChatAPI = {
 };
 
 export const ChampionAPI = {
+  // Retorna { champion: {...}|null, players: [...] }
   list:  ()     => api.get('/champion').then((r) => r.data),
   teams: ()     => api.get('/champion/teams').then((r) => r.data),
   save:  (data) => api.post('/champion', data).then((r) => r.data),

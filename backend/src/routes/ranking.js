@@ -3,21 +3,51 @@ import pool from '../config/database.js';
 
 const router = Router();
 
-// GET /api/ranking  → ranking geral (usa a VIEW do MySQL)
+// GET /api/ranking  → ranking geral (usa a VIEW do MySQL + bônus campeão)
 router.get('/', async (_req, res) => {
   try {
     const [rows] = await pool.query('SELECT * FROM ranking_view');
-    const ranked = rows.map((r, i) => ({
-      position: i + 1,
+
+    // Determina o campeão pelo campo winner da partida FINAL (cobre pênaltis)
+    const [[finalMatch]] = await pool.query(`
+      SELECT home_team_id, away_team_id, winner
+      FROM matches
+      WHERE stage = 'FINAL' AND status = 'finished' AND winner IS NOT NULL
+      LIMIT 1
+    `);
+
+    const winnersSet = new Set();
+    if (finalMatch) {
+      const championTeamId =
+        finalMatch.winner === 'home' ? finalMatch.home_team_id : finalMatch.away_team_id;
+
+      const [picks] = await pool.query(
+        'SELECT player_id FROM champion_picks WHERE team_id = ?',
+        [championTeamId]
+      );
+      for (const p of picks) winnersSet.add(p.player_id);
+    }
+
+    const ranked = rows.map((r) => ({
       player_id: r.player_id,
       player_name: r.player_name,
       avatar_color: r.avatar_color,
-      pontos: Number(r.pontos) || 0,
+      pontos: (Number(r.pontos) || 0) + (winnersSet.has(r.player_id) ? 10 : 0),
       acertos_exatos: Number(r.acertos_exatos) || 0,
       acertos_vencedor: Number(r.acertos_vencedor) || 0,
       jogos_com_resultado: Number(r.jogos_com_resultado) || 0,
       total_palpites: Number(r.total_palpites) || 0,
+      acertou_campeao: winnersSet.has(r.player_id),
     }));
+
+    ranked.sort(
+      (a, b) =>
+        b.pontos - a.pontos ||
+        b.acertos_exatos - a.acertos_exatos ||
+        a.player_name.localeCompare(b.player_name)
+    );
+    ranked.forEach((r, i) => { r.position = i + 1; });
+
     res.json(ranked);
   } catch (err) {
     console.error(err);
@@ -56,9 +86,39 @@ router.get('/:player_id/detail', async (req, res) => {
       [req.params.player_id]
     );
 
-    const total = rows.reduce((sum, r) => sum + (Number(r.pontos) || 0), 0);
+    const baseTotal = rows.reduce((sum, r) => sum + (Number(r.pontos) || 0), 0);
 
-    res.json({ player, total_pontos: total, predictions: rows });
+    // Bônus campeão
+    const [[finalMatch]] = await pool.query(`
+      SELECT home_team_id, away_team_id, winner
+      FROM matches
+      WHERE stage = 'FINAL' AND status = 'finished' AND winner IS NOT NULL
+      LIMIT 1
+    `);
+
+    let bonusCampeao = 0;
+    let acertouCampeao = false;
+    if (finalMatch) {
+      const championTeamId =
+        finalMatch.winner === 'home' ? finalMatch.home_team_id : finalMatch.away_team_id;
+
+      const [[pick]] = await pool.query(
+        'SELECT team_id FROM champion_picks WHERE player_id = ?',
+        [req.params.player_id]
+      );
+      if (pick && pick.team_id === championTeamId) {
+        bonusCampeao = 10;
+        acertouCampeao = true;
+      }
+    }
+
+    res.json({
+      player,
+      total_pontos: baseTotal + bonusCampeao,
+      bonus_campeao: bonusCampeao,
+      acertou_campeao: acertouCampeao,
+      predictions: rows,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro ao buscar detalhe do jogador' });

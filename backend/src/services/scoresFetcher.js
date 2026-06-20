@@ -185,11 +185,17 @@ function parseFootballData(data) {
     const hs = hasScore ? (m.score?.fullTime?.home ?? null) : null;
     const as = hasScore ? (m.score?.fullTime?.away ?? null) : null;
 
+    // winner vem da API e cobre pênaltis (placar empate, mas há um vencedor)
+    const apiWinner = finished ? m.score?.winner : null;
+    const winner =
+      apiWinner === 'HOME_TEAM' ? 'home' :
+      apiWinner === 'AWAY_TEAM' ? 'away' : null;
+
     // football-data.org fornece minute (inteiro) e injuryTime para jogos IN_PLAY
     const minute = (m.minute != null && !finished) ? Number(m.minute) : null;
     const injuryTime = (m.injuryTime != null && !finished) ? Number(m.injuryTime) : null;
 
-    out.push({ home, away, homeScore: hs, awayScore: as, finished, paused, minute, injuryTime, homeScorers: [], awayScorers: [] });
+    out.push({ home, away, homeScore: hs, awayScore: as, winner, finished, paused, minute, injuryTime, homeScorers: [], awayScorers: [] });
   }
   return out;
 }
@@ -290,7 +296,7 @@ export async function syncScores() {
   // Mapa name_en (lowercase) → match. Carrega jogos do banco.
   const [matches] = await pool.query(
     `SELECT m.id, m.group_id, m.home_score, m.away_score, m.status, m.result_source,
-            m.live_minute, m.home_scorers, m.away_scorers,
+            m.live_minute, m.home_scorers, m.away_scorers, m.winner,
             t1.name_en AS home_en, t2.name_en AS away_en
      FROM matches m
      JOIN teams t1 ON t1.id = m.home_team_id
@@ -362,9 +368,10 @@ export async function syncScores() {
              live_minute = ?, live_injury_time = ?,
              home_scorers = COALESCE(?, home_scorers),
              away_scorers = COALESCE(?, away_scorers),
+             winner = COALESCE(?, winner),
              result_source = 'api', result_updated_at = UTC_TIMESTAMP()
        WHERE id = ?`,
-      [g.homeScore, g.awayScore, newStatus, newMinute, newInjury, newHomeScorers, newAwayScorers, m.id]
+      [g.homeScore, g.awayScore, newStatus, newMinute, newInjury, newHomeScorers, newAwayScorers, g.winner ?? null, m.id]
     );
     broadcast('result', {
       match_id: m.id,

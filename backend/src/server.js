@@ -19,6 +19,7 @@ import sseRouter from './routes/sse.js';
 import seenRouter from './routes/seen.js';
 import chatRouter from './routes/chat.js';
 import knockoutRouter from './routes/knockout.js';
+import championRouter from './routes/champion.js';
 
 dotenv.config();
 
@@ -54,6 +55,7 @@ app.use('/api/standings', requireAuth, standingsRouter);
 app.use('/api/seen', requireAuth, seenRouter);
 app.use('/api/chat', requireAuth, chatRouter);
 app.use('/api/knockout', requireAuth, knockoutRouter);
+app.use('/api/champion', requireAuth, championRouter);
 
 // 404
 app.use((req, res) => {

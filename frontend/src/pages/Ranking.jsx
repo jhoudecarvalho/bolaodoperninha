@@ -41,7 +41,7 @@ export default function Ranking() {
 
       <RankingTable rows={rows} />
       <div className="text-center text-xs text-ink-dim space-y-1">
-        <p>🎯 Placar exato = <b className="text-gold">3 pts</b> &nbsp;·&nbsp; ⚽ Acertou o vencedor = <b className="text-yellow-400">1 pt</b></p>
+        <p>🎯 Placar exato = <b className="text-gold">3 pts</b> &nbsp;·&nbsp; ⚽ Acertou o vencedor = <b className="text-yellow-400">1 pt</b> &nbsp;·&nbsp; 🏆 Campeão do mundo = <b className="text-gold">+10 pts</b></p>
         <p>Atualiza em tempo real</p>
       </div>
     </div>

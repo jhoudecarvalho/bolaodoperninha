@@ -9,6 +9,7 @@ const LINKS = [
   { to: '/ranking', label: '🏆 Ranking' },
   { to: '/classificacao', label: '🗂️ Classificação' },
   { to: '/finais', label: '⚡ Mata-Mata' },
+  { to: '/campeao', label: '🏅 Campeão' },
   { to: '/detalhes', label: '🔍 Detalhes' },
 ];
 

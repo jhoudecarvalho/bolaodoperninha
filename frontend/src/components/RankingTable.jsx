@@ -41,6 +41,11 @@ export default function RankingTable({ rows = [], compact = false }) {
                       style={{ backgroundColor: r.avatar_color }}
                     />
                     <span className={top ? 'font-bold text-gold' : ''}>{r.player_name}</span>
+                    {r.acertou_campeao && (
+                      <span className="badge bg-gold/20 text-gold text-xs" title="Acertou o campeão! +10 pts">
+                        🏆 +10
+                      </span>
+                    )}
                   </Link>
                 </td>
                 <td className="px-3 py-2 text-right font-bold tabular-nums text-gold">

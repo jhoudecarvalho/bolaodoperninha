@@ -98,3 +98,9 @@ export const ChatAPI = {
   history: () => api.get('/chat').then((r) => r.data),
   send: (message) => api.post('/chat', { message }).then((r) => r.data),
 };
+
+export const ChampionAPI = {
+  list:  ()     => api.get('/champion').then((r) => r.data),
+  teams: ()     => api.get('/champion/teams').then((r) => r.data),
+  save:  (data) => api.post('/champion', data).then((r) => r.data),
+};

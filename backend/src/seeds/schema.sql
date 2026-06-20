@@ -9,6 +9,7 @@ SET FOREIGN_KEY_CHECKS = 0;
 DROP VIEW  IF EXISTS ranking_view;
 DROP TABLE IF EXISTS chat_messages;
 DROP TABLE IF EXISTS predictions;
+DROP TABLE IF EXISTS champion_picks;
 DROP TABLE IF EXISTS matches;
 DROP TABLE IF EXISTS teams;
 DROP TABLE IF EXISTS players;
@@ -58,6 +59,7 @@ CREATE TABLE matches (
   live_injury_time TINYINT UNSIGNED DEFAULT NULL,
   home_scorers JSON DEFAULT NULL,
   away_scorers JSON DEFAULT NULL,
+  winner ENUM('home','away') DEFAULT NULL,
 
   FOREIGN KEY (group_id) REFERENCES `groups`(id),
   FOREIGN KEY (home_team_id) REFERENCES teams(id),
@@ -117,6 +119,19 @@ CREATE TABLE predictions (
   FOREIGN KEY (match_id) REFERENCES matches(id),
 
   UNIQUE KEY uq_player_match (player_id, match_id)
+);
+
+-- ==========================================
+-- TABELA: champion_picks (palpite de campeão)
+-- ==========================================
+CREATE TABLE champion_picks (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  player_id INT NOT NULL UNIQUE,
+  team_id INT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
+  FOREIGN KEY (team_id) REFERENCES teams(id)
 );
 
 -- ==========================================

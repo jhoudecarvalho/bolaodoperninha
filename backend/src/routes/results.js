@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import pool from '../config/database.js';
-import { syncScores, syncScoresOnLogin } from '../services/scoresFetcher.js';
+import { syncScores, syncScoresOnLogin, backfillStats } from '../services/scoresFetcher.js';
 
 const router = Router();
 
@@ -66,6 +66,18 @@ router.post('/sync', async (_req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro ao sincronizar com a API' });
+  }
+});
+
+// POST /api/results/backfill-stats  → preenche stats/venue para jogos encerrados sem dados (admin)
+router.post('/backfill-stats', async (req, res) => {
+  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Apenas admin' });
+  try {
+    const result = await backfillStats();
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro no backfill de estatísticas' });
   }
 });
 

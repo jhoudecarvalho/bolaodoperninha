@@ -4,44 +4,94 @@ import pool from '../config/database.js';
 const router = Router();
 const TOKEN = process.env.FOOTBALL_DATA_TOKEN || '';
 const BASE = 'https://api.football-data.org/v4/competitions/WC';
-const TTL = 5 * 60 * 1000; // 5 min
+const TTL = 90_000; // 90s — atualizado via ESPN a cada ~2min
 
 const cache = { standings: null, scorers: null, ts: 0 };
 
-async function fetchFD(path) {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { 'X-Auth-Token': TOKEN },
-    signal: AbortSignal.timeout(15000),
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
-}
+// Calcula a classificação de cada grupo a partir dos matches do banco
+async function computeFromDB() {
+  const [rows] = await pool.query(`
+    SELECT
+      t.name, t.flag_emoji, t.group_id,
+      COUNT(m.id)                                                           AS played,
+      SUM(CASE
+            WHEN m.home_team_id = t.id AND m.home_score > m.away_score THEN 1
+            WHEN m.away_team_id = t.id AND m.away_score > m.home_score THEN 1
+            ELSE 0 END)                                                     AS won,
+      SUM(CASE
+            WHEN (m.home_team_id = t.id OR m.away_team_id = t.id)
+              AND m.home_score = m.away_score                               THEN 1
+            ELSE 0 END)                                                     AS draw,
+      SUM(CASE
+            WHEN m.home_team_id = t.id AND m.home_score < m.away_score THEN 1
+            WHEN m.away_team_id = t.id AND m.away_score < m.home_score THEN 1
+            ELSE 0 END)                                                     AS lost,
+      SUM(CASE
+            WHEN m.home_team_id = t.id THEN COALESCE(m.home_score, 0)
+            WHEN m.away_team_id = t.id THEN COALESCE(m.away_score, 0)
+            ELSE 0 END)                                                     AS goalsFor,
+      SUM(CASE
+            WHEN m.home_team_id = t.id THEN COALESCE(m.away_score, 0)
+            WHEN m.away_team_id = t.id THEN COALESCE(m.home_score, 0)
+            ELSE 0 END)                                                     AS goalsAgainst
+    FROM teams t
+    LEFT JOIN matches m
+           ON (m.home_team_id = t.id OR m.away_team_id = t.id)
+          AND m.stage = 'GROUP_STAGE'
+          AND m.home_score IS NOT NULL
+          AND m.away_score IS NOT NULL
+    GROUP BY t.id, t.name, t.flag_emoji, t.group_id
+    ORDER BY t.group_id
+  `);
 
-let flagMap = null;
-async function getFlags() {
-  if (flagMap) return flagMap;
-  const [rows] = await pool.query('SELECT name_en, flag_emoji FROM teams');
-  flagMap = Object.fromEntries(rows.map((r) => [r.name_en.toLowerCase(), r.flag_emoji]));
-  return flagMap;
-}
+  const groupMap = {};
+  for (const r of rows) {
+    const g = r.group_id;
+    if (!groupMap[g]) groupMap[g] = [];
+    const gf   = Number(r.goalsFor);
+    const ga   = Number(r.goalsAgainst);
+    const won  = Number(r.won);
+    const draw = Number(r.draw);
+    const lost = Number(r.lost);
+    groupMap[g].push({
+      team:           r.name,
+      flag:           r.flag_emoji,
+      played:         Number(r.played),
+      won, draw, lost,
+      goalsFor:       gf,
+      goalsAgainst:   ga,
+      goalDifference: gf - ga,
+      points:         won * 3 + draw,
+    });
+  }
 
-function flag(flags, name) {
-  return flags[(name || '').toLowerCase()] || '🏳';
+  // Ordena: pts → saldo → gols pró → vitórias
+  const rawGroups = Object.entries(groupMap)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([group, table]) => {
+      table.sort((a, b) =>
+        b.points - a.points ||
+        b.goalDifference - a.goalDifference ||
+        b.goalsFor - a.goalsFor ||
+        b.won - a.won
+      );
+      table.forEach((t, i) => { t.position = i + 1; });
+      return { group, table };
+    });
+
+  return rawGroups;
 }
 
 /**
  * Copa 2026: 12 grupos de 4 times
  *   - 1º e 2º de cada grupo → 24 classificados diretos
  *   - 8 melhores 3os colocados (de 12) → +8 classificados
- * Critério de desempate entre 3os: pontos → saldo → gols pró → vitórias
  */
 function computeClassification(groups) {
-  // Coleta os 3os de cada grupo (só quando jogaram pelo menos 1 jogo)
   const thirds = groups
     .map((g) => g.table[2] ? { ...g.table[2], group: g.group } : null)
     .filter(Boolean);
 
-  // Ordena melhores 3os
   const thirdsRanked = [...thirds].sort((a, b) =>
     b.points - a.points ||
     b.goalDifference - a.goalDifference ||
@@ -50,7 +100,6 @@ function computeClassification(groups) {
   );
   const best3rdTeams = new Set(thirdsRanked.slice(0, 8).map((t) => t.team));
 
-  // Anota cada time com status de classificação
   const annotated = groups.map((g) => ({
     ...g,
     table: g.table.map((row) => {
@@ -61,7 +110,6 @@ function computeClassification(groups) {
     }),
   }));
 
-  // Lista dos melhores 3os com ranking
   const best3rds = thirdsRanked.map((t, i) => ({
     rank: i + 1,
     group: t.group,
@@ -75,7 +123,6 @@ function computeClassification(groups) {
     qualified: i < 8,
   }));
 
-  // Resumo: todos os 32 classificados
   const classified = {
     direct: annotated.flatMap((g) =>
       g.table.filter((r) => r.classif === 'direct').map((r) => ({ ...r, group: g.group }))
@@ -86,30 +133,12 @@ function computeClassification(groups) {
   return { groups: annotated, best3rds, classified };
 }
 
-// GET /api/standings → grupos com classificação calculada + melhores 3os
+// GET /api/standings → classificação calculada do banco (ESPN mantém atualizado)
 router.get('/', async (_req, res) => {
   try {
     if (cache.standings && Date.now() - cache.ts < TTL) return res.json(cache.standings);
 
-    const [data, flags] = await Promise.all([fetchFD('/standings'), getFlags()]);
-
-    const rawGroups = (data.standings || []).map((s) => ({
-      group: (s.group || '').replace(/^(GROUP_|Group )/, '') || '?',
-      table: (s.table || []).map((row) => ({
-        position: row.position,
-        team: row.team.name,
-        flag: flag(flags, row.team.name),
-        played: row.playedGames,
-        won: row.won,
-        draw: row.draw,
-        lost: row.lost,
-        goalsFor: row.goalsFor,
-        goalsAgainst: row.goalsAgainst,
-        goalDifference: row.goalDifference,
-        points: row.points,
-      })),
-    }));
-
+    const rawGroups = await computeFromDB();
     const result = computeClassification(rawGroups);
 
     cache.standings = result;
@@ -122,18 +151,28 @@ router.get('/', async (_req, res) => {
   }
 });
 
-// GET /api/standings/scorers → artilheiros
+// GET /api/standings/scorers → artilheiros (ainda via fd.org — ESPN não expõe isso facilmente)
 router.get('/scorers', async (_req, res) => {
   try {
     if (cache.scorers && Date.now() - cache.ts < TTL) return res.json(cache.scorers);
 
-    const [data, flags] = await Promise.all([fetchFD('/scorers?limit=20'), getFlags()]);
+    const res2 = await fetch(`${BASE}/scorers?limit=20`, {
+      headers: { 'X-Auth-Token': TOKEN },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res2.ok) throw new Error(`HTTP ${res2.status}`);
+    const data = await res2.json();
+
+    // Busca flags do banco para completar os nomes do fd.org
+    const [teamRows] = await pool.query('SELECT name_en, flag_emoji FROM teams');
+    const flagMap = Object.fromEntries(teamRows.map((r) => [r.name_en.toLowerCase(), r.flag_emoji]));
+    const getFlag = (name) => flagMap[(name || '').toLowerCase()] || '🏳️';
 
     const result = (data.scorers || []).map((s, i) => ({
       rank: i + 1,
       player: s.player.name,
       team: s.team.name,
-      flag: flag(flags, s.team.name),
+      flag: getFlag(s.team.name),
       goals: s.goals ?? 0,
       assists: s.assists ?? 0,
       played: s.playedMatches ?? 0,

@@ -4,6 +4,7 @@ import { formatLocal, isToday } from '../utils/datetime.js';
 import CountdownTimer from './CountdownTimer.jsx';
 import MatchTimer from './MatchTimer.jsx';
 import ScoreInput from './ScoreInput.jsx';
+import MatchStatsModal from './MatchStatsModal.jsx';
 
 const STAGE_LABELS = {
   GROUP_STAGE:    (g) => g ? `Grupo ${g}` : 'Fase de Grupos',
@@ -23,6 +24,11 @@ function stageLabel(stage) {
 function parseScorers(raw) {
   if (!raw) return [];
   try { return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return []; }
+}
+
+function parseStats(raw) {
+  if (!raw) return null;
+  try { return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return null; }
 }
 
 function StatusBadge({ match }) {
@@ -62,43 +68,60 @@ export default function MatchCard({
   playerName = '',
   showQuickPredict = false,
   showPredictions = false,
+  matchPredictions,  // pré-carregado pelo pai → evita byMatch individual
+  myPrediction,      // pré-carregado pelo pai → evita byPlayer individual
   onSaved,
 }) {
-  const [predictions, setPredictions] = useState([]);
-  const [home, setHome] = useState('');
-  const [away, setAway] = useState('');
+  const [predictions, setPredictions] = useState(matchPredictions ?? []);
+  const [home, setHome] = useState(myPrediction != null ? String(myPrediction.home_score) : '');
+  const [away, setAway] = useState(myPrediction != null ? String(myPrediction.away_score) : '');
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
-  const [myPred, setMyPred] = useState(null); // palpite do próprio jogador (com placar)
+  const [myPred, setMyPred] = useState(myPrediction ?? null);
+  const [showStats, setShowStats] = useState(false);
+
+  const homeStats = parseStats(match.home_stats);
+  const awayStats = parseStats(match.away_stats);
+  const hasStats  = homeStats || awayStats;
 
   const locked = match.locked;
   const hasResult = match.home_score != null && match.away_score != null;
   const today = isToday(match.kick_off_utc);
 
-  // Carrega palpites de todos (admin) ou só quando o card precisa exibi-los
+  // Sincroniza quando o pai atualiza matchPredictions (ex: após salvar)
   useEffect(() => {
-    if (!showPredictions) return;
-    PredictionsAPI.byMatch(match.id).then(setPredictions).catch(() => {});
-  }, [showPredictions, match.id]);
+    if (matchPredictions !== undefined) setPredictions(matchPredictions);
+  }, [matchPredictions]);
 
-  // Pré-preenche inputs com o palpite do usuário logado (via byPlayer,
-  // que sempre traz o placar — o byMatch oculta antes do início).
+  // Sincroniza quando o pai atualiza myPrediction
   useEffect(() => {
-    if (!showQuickPredict || !playerId) {
-      setMyPred(null);
-      setHome('');
-      setAway('');
+    if (myPrediction !== undefined) {
+      setMyPred(myPrediction ?? null);
+      setHome(myPrediction != null ? String(myPrediction.home_score) : '');
+      setAway(myPrediction != null ? String(myPrediction.away_score) : '');
+    }
+  }, [myPrediction]);
+
+  // Fallback: busca individual só quando o pai NÃO passou os props
+  useEffect(() => {
+    if (!showPredictions || matchPredictions !== undefined) return;
+    PredictionsAPI.byMatch(match.id).then(setPredictions).catch(() => {});
+  }, [showPredictions, match.id, matchPredictions]);
+
+  useEffect(() => {
+    if (!showQuickPredict || !playerId || myPrediction !== undefined) {
+      if (myPrediction === undefined) { setMyPred(null); setHome(''); setAway(''); }
       return;
     }
     PredictionsAPI.byPlayer(playerId)
       .then((list) => {
         const mine = list.find((p) => p.match_id === match.id) || null;
         setMyPred(mine);
-        setHome(mine ? mine.home_score : '');
-        setAway(mine ? mine.away_score : '');
+        setHome(mine != null ? String(mine.home_score) : '');
+        setAway(mine != null ? String(mine.away_score) : '');
       })
       .catch(() => {});
-  }, [showQuickPredict, playerId, match.id]);
+  }, [showQuickPredict, playerId, match.id, myPrediction]);
 
   async function handleSave() {
     if (!playerId) {
@@ -201,10 +224,52 @@ export default function MatchCard({
         );
       })()}
 
-      {hasResult && match.result_source === 'api' && (
+      {/* Linha compacta: estádio + público (ao vivo e pausado) */}
+      {(match.status === 'live' || match.status === 'paused') && (match.venue || match.attendance) && (
+        <div className="mt-2 text-center text-xs text-ink-dim">
+          📍 {match.venue}
+          {match.attendance && (
+            <span className="ml-2">· 👥 {Number(match.attendance).toLocaleString('pt-BR')}</span>
+          )}
+        </div>
+      )}
+
+      {/* Barra de posse ao vivo */}
+      {(match.status === 'live' || match.status === 'paused') && homeStats && awayStats && (
+        <div className="mt-1.5 flex items-center gap-1.5 text-xs text-ink-dim">
+          <span className="w-7 text-right tabular-nums">{homeStats.possession}%</span>
+          <div className="flex h-1.5 flex-1 overflow-hidden rounded-full bg-bg-900">
+            <div className="h-full rounded-full bg-gold transition-all duration-500"
+              style={{ width: `${homeStats.possession}%` }} />
+          </div>
+          <span className="w-7 tabular-nums">{awayStats.possession}%</span>
+          <span className="ml-1 text-ink-dim">posse</span>
+        </div>
+      )}
+
+      {/* Botão "Ver estatísticas" quando disponível */}
+      {hasStats && (
+        <div className="mt-2 flex items-center justify-between">
+          <button
+            className="text-xs text-ink-dim hover:text-gold transition-colors"
+            onClick={() => setShowStats(true)}
+          >
+            📊 Ver estatísticas
+          </button>
+          {hasResult && match.result_source === 'api' && (
+            <span className="badge bg-api/20 text-api">📡 API</span>
+          )}
+        </div>
+      )}
+
+      {!hasStats && hasResult && match.result_source === 'api' && (
         <div className="mt-2 text-right">
           <span className="badge bg-api/20 text-api">📡 API</span>
         </div>
+      )}
+
+      {showStats && (
+        <MatchStatsModal match={match} onClose={() => setShowStats(false)} />
       )}
 
       {showPredictions && (

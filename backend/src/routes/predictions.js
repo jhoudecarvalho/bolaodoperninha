@@ -35,7 +35,7 @@ function ownPlayerOnly(req, res, next) {
 // GET /api/predictions?player_id=1  |  ?match_id=5  |  ?group=A
 router.get('/', async (req, res) => {
   try {
-    const { player_id, match_id, group } = req.query;
+    const { player_id, match_id, match_ids, group } = req.query;
     const where = [];
     const params = [];
     if (player_id) {
@@ -45,6 +45,13 @@ router.get('/', async (req, res) => {
     if (match_id) {
       where.push('pr.match_id = ?');
       params.push(match_id);
+    }
+    if (match_ids) {
+      const ids = String(match_ids).split(',').map(Number).filter(Boolean);
+      if (ids.length) {
+        where.push(`pr.match_id IN (?)`);
+        params.push(ids);
+      }
     }
     if (group) {
       where.push('m.group_id = ?');

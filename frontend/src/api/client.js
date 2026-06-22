@@ -66,6 +66,8 @@ export const PredictionsAPI = {
     api.get('/predictions', { params: { player_id } }).then((r) => r.data),
   byMatch: (match_id) =>
     api.get('/predictions', { params: { match_id } }).then((r) => r.data),
+  byMatches: (matchIds) =>
+    api.get('/predictions', { params: { match_ids: matchIds.join(',') } }).then((r) => r.data),
   byGroup: (group) =>
     api.get('/predictions', { params: { group } }).then((r) => r.data),
   save: (data) => api.post('/predictions', data).then((r) => r.data),
@@ -75,6 +77,7 @@ export const PredictionsAPI = {
 export const ResultsAPI = {
   list: () => api.get('/results').then((r) => r.data),
   sync: () => api.post('/results/sync').then((r) => r.data),
+  backfillStats: () => api.post('/results/backfill-stats').then((r) => r.data),
   acertadores: (group) =>
     api.get('/results/acertadores', { params: group ? { group } : {} }).then((r) => r.data),
 };

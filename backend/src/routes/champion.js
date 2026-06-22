@@ -102,8 +102,17 @@ router.get('/teams', async (_req, res) => {
   }
 });
 
+// Prazo: 27/06/2026 23:59 BRT = 28/06/2026 02:59 UTC
+const CHAMPION_DEADLINE = new Date('2026-06-28T02:59:00Z');
+
 // POST /api/champion — salvar/atualizar palpite de campeão
 router.post('/', denyAdmin, ownPlayerOnly, async (req, res) => {
+  if (new Date() > CHAMPION_DEADLINE) {
+    return res.status(403).json({
+      error: 'Prazo encerrado',
+      message: 'O prazo para escolher o campeão encerrou em 27/06 às 23:59. As apostas estão bloqueadas.',
+    });
+  }
   try {
     const player_id = Number(req.body?.player_id);
     const team_id   = Number(req.body?.team_id);

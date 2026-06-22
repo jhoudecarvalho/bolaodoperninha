@@ -2,6 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { ChampionAPI } from '../api/client.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import Confetti from '../components/Confetti.jsx';
+import { countdown, hasStarted } from '../utils/datetime.js';
+
+// 27/06/2026 23:59 BRT = 28/06/2026 02:59 UTC
+const DEADLINE = '2026-06-28T02:59:00Z';
 
 const GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
 
@@ -113,11 +117,51 @@ function CelebrationScreen({ champion, players, playerId }) {
   );
 }
 
+// ── Contador de prazo ─────────────────────────────────────────────────────────
+function DeadlineBanner() {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  const locked = hasStarted(DEADLINE, now);
+  const remaining = countdown(DEADLINE, now);
+  const diff = new Date(DEADLINE).getTime() - now;
+  const urgent = !locked && diff < 2 * 86400000;   // menos de 2 dias
+  const critical = !locked && diff < 6 * 3600000;  // menos de 6 horas
+
+  if (locked) {
+    return (
+      <div className="flex items-center gap-2 rounded-xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger">
+        <span>🔒</span>
+        <span>Prazo encerrado — apostas bloqueadas desde 27/06 às 23:59.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`flex items-center justify-between gap-2 rounded-xl border px-4 py-3 text-sm ${
+      critical ? 'border-danger/50 bg-danger/10 text-danger' :
+      urgent   ? 'border-warn/50 bg-warn/10 text-warn' :
+                 'border-ok/30 bg-ok/5 text-ok'
+    }`}>
+      <span>
+        {critical ? '🔥' : urgent ? '⚠️' : '✅'}{' '}
+        Apostas abertas até <b>27/06 às 23:59</b>
+        {urgent && ' — prazo se aproximando!'}
+      </span>
+      <span className="tabular-nums font-bold">⏱ {remaining}</span>
+    </div>
+  );
+}
+
 // ── Tela normal (fase de grupos / mata-mata em andamento) ─────────────────────
 function PickScreen({ teams, picks, playerId, isAdmin }) {
   const [group,  setGroup]  = useState('A');
   const [saving, setSaving] = useState(false);
   const [msg,    setMsg]    = useState(null);
+  const locked = hasStarted(DEADLINE);
 
   const teamsByGroup = useMemo(
     () =>
@@ -157,6 +201,9 @@ function PickScreen({ teams, picks, playerId, isAdmin }) {
 
   return (
     <>
+      {/* Contador de prazo */}
+      <DeadlineBanner />
+
       {/* Regras */}
       <div className="rounded-xl border border-gold/30 bg-gold/5 p-4 space-y-2">
         <p className="text-sm font-semibold text-gold">📋 Como funciona</p>
@@ -167,11 +214,11 @@ function PickScreen({ teams, picks, playerId, isAdmin }) {
           </li>
           <li className="flex items-start gap-2">
             <span className="mt-0.5">✏️</span>
-            <span>Você pode <b className="text-ink">trocar sua escolha à vontade</b> até o início do Mata-Mata. Aproveite a fase de grupos para reavaliar!</span>
+            <span>Você pode <b className="text-ink">trocar sua escolha à vontade</b> até <b className="text-danger">27/06 às 23:59</b>. O Mata-Mata começa dia 28/06 e as apostas fecham!</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="mt-0.5 text-danger">🔒</span>
-            <span>No início do Mata-Mata as escolhas são <b className="text-danger">bloqueadas definitivamente</b> — depois disso nenhuma troca é permitida.</span>
+            <span>Após <b className="text-danger">27/06 às 23:59</b> as escolhas são <b className="text-danger">bloqueadas definitivamente</b> — depois disso nenhuma troca é permitida.</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="mt-0.5 text-warn">⚠️</span>
@@ -206,7 +253,7 @@ function PickScreen({ teams, picks, playerId, isAdmin }) {
       </div>
 
       {/* Seletor de grupo + times */}
-      {!isAdmin && (
+      {!isAdmin && !locked && (
         <div className="card p-4 space-y-4">
           <div>
             <h2 className="mb-2 text-sm text-ink-mut">Selecione o grupo</h2>

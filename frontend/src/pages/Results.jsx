@@ -9,6 +9,19 @@ function parseScorers(raw) {
   try { return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return []; }
 }
 
+function parseStats(raw) {
+  if (!raw) return null;
+  try { return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return null; }
+}
+
+const STAT_ROWS = [
+  { label: 'Posse (%)',  hk: 'possession',    ak: 'possession' },
+  { label: 'Chutes',     hk: 'shots',         ak: 'shots' },
+  { label: 'No gol',     hk: 'shotsOnTarget', ak: 'shotsOnTarget' },
+  { label: 'Escanteios', hk: 'corners',       ak: 'corners' },
+  { label: 'Faltas',     hk: 'fouls',         ak: 'fouls' },
+];
+
 const GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
 
 export default function Results() {
@@ -19,6 +32,7 @@ export default function Results() {
   const [msg, setMsg] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncingMatches, setSyncingMatches] = useState(false);
+  const [backfilling, setBackfilling] = useState(false);
   const [acertadores, setAcertadores] = useState({});
 
   async function load() {
@@ -54,6 +68,20 @@ export default function Results() {
     }
   }
 
+  async function handleBackfill() {
+    setBackfilling(true);
+    setMsg(null);
+    try {
+      const r = await ResultsAPI.backfillStats();
+      setMsg({ type: 'ok', text: `Estatísticas preenchidas: ${r.updated} jogo(s) atualizados.` });
+      await load();
+    } catch {
+      setMsg({ type: 'err', text: 'Falha ao buscar estatísticas históricas.' });
+    } finally {
+      setBackfilling(false);
+    }
+  }
+
   async function handleSyncMatches() {
     setSyncingMatches(true);
     setMsg(null);
@@ -77,9 +105,14 @@ export default function Results() {
         <h1 className="font-display text-2xl font-bold">📊 Resultados</h1>
         <div className="flex gap-2">
           {isAdmin && (
-            <button className="btn-ghost text-sm" onClick={handleSyncMatches} disabled={syncingMatches}>
-              {syncingMatches ? 'Atualizando...' : '🗓️ Atualizar jogos (API)'}
-            </button>
+            <>
+              <button className="btn-ghost text-sm" onClick={handleSyncMatches} disabled={syncingMatches}>
+                {syncingMatches ? 'Atualizando...' : '🗓️ Atualizar jogos (API)'}
+              </button>
+              <button className="btn-ghost text-sm" onClick={handleBackfill} disabled={backfilling}>
+                {backfilling ? 'Buscando...' : '📊 Preencher estatísticas'}
+              </button>
+            </>
           )}
           <button className="btn-ghost text-sm" onClick={handleSync} disabled={syncing}>
             {syncing ? 'Sincronizando...' : '📡 Sincronizar placares'}
@@ -221,6 +254,48 @@ export default function Results() {
                     ) : (
                       <span className="text-ink-mut">{empty}</span>
                     )}
+                  </div>
+                );
+              })()}
+
+              {/* Estádio + estatísticas */}
+              {(() => {
+                const hs = parseStats(m.home_stats);
+                const as = parseStats(m.away_stats);
+                const hasStats = hs || as;
+                if (!m.venue && !m.attendance && !hasStats) return null;
+                const rows = STAT_ROWS
+                  .map(({ label, hk, ak }) => ({ label, hv: hs?.[hk], av: as?.[ak] }))
+                  .filter((r) => r.hv != null || r.av != null);
+                return (
+                  <div className="mt-3 border-t border-line-light pt-3 space-y-1.5">
+                    {(m.venue || m.attendance) && (
+                      <div className="text-center text-xs text-ink-dim mb-2">
+                        📍 {m.venue}
+                        {m.attendance && (
+                          <span className="ml-2">· 👥 {Number(m.attendance).toLocaleString('pt-BR')}</span>
+                        )}
+                      </div>
+                    )}
+                    {rows.map(({ label, hv, av }) => {
+                      const h = hv ?? 0;
+                      const a = av ?? 0;
+                      const total = h + a || 1;
+                      const homePct = (h / total) * 100;
+                      return (
+                        <div key={label} className="grid grid-cols-[2.5rem_1fr_5rem_1fr_2.5rem] items-center gap-1.5 text-xs">
+                          <span className="text-right tabular-nums font-semibold text-ink">{hv ?? '–'}</span>
+                          <div className="flex h-1.5 overflow-hidden rounded-full bg-bg-900 justify-end">
+                            <div className="h-full rounded-full bg-gold transition-all duration-500" style={{ width: `${homePct}%` }} />
+                          </div>
+                          <span className="text-center text-ink-dim">{label}</span>
+                          <div className="h-1.5 overflow-hidden rounded-full bg-bg-900">
+                            <div className="h-full rounded-full bg-ink-dim transition-all duration-500" style={{ width: `${100 - homePct}%` }} />
+                          </div>
+                          <span className="tabular-nums font-semibold text-ink">{av ?? '–'}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               })()}

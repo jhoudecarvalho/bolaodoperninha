@@ -125,8 +125,8 @@ function PredictCard({ match, playerId, stageKey, onSaved }) {
             <span className={`text-xs font-semibold text-center leading-tight ${homeWon ? 'text-gold' : 'text-ink'}`}>
               {match.home?.name ?? 'A definir'}
             </span>
-            {match.isProjection && match.homeLabel && (
-              <span className="text-[9px] text-center leading-tight" style={{ color: '#818cf8' }}>{match.homeLabel}</span>
+            {match.homeLabel && (
+              <span className="text-[9px] text-center leading-tight" style={{ color: match.isProjection ? '#818cf8' : '#94a3b8' }}>{match.homeLabel}</span>
             )}
           </div>
 
@@ -153,8 +153,8 @@ function PredictCard({ match, playerId, stageKey, onSaved }) {
             <span className={`text-xs font-semibold text-center leading-tight ${awayWon ? 'text-gold' : 'text-ink'}`}>
               {match.away?.name ?? 'A definir'}
             </span>
-            {match.isProjection && match.awayLabel && (
-              <span className="text-[9px] text-center leading-tight" style={{ color: '#818cf8' }}>{match.awayLabel}</span>
+            {match.awayLabel && (
+              <span className="text-[9px] text-center leading-tight" style={{ color: match.isProjection ? '#818cf8' : '#94a3b8' }}>{match.awayLabel}</span>
             )}
           </div>
         </div>
@@ -178,12 +178,12 @@ function PredictCard({ match, playerId, stageKey, onSaved }) {
 
       {/* Seção de palpite */}
       <div className="px-4 pb-3 pt-2 bg-bg-800/40" style={{ borderTop: `1px solid ${accent}20` }}>
-        {/* Sem ID no banco = jogo ainda não foi importado (times indefinidos) */}
-        {!match.dbMatchId ? (
+        {/* Times ainda não definidos (placeholder ESPN ou projeção) */}
+        {(!match.home || !match.away) ? (
           <p className="text-center text-xs text-ink-dim py-0.5">
             {match.isProjection
               ? <span style={{ color: '#a5b4fc' }}>📊 Palpites abrem quando os times forem confirmados</span>
-              : '⏳ Palpites abrem quando os times forem confirmados'}
+              : <span>⏳ Palpites abrem quando as seleções forem confirmadas</span>}
           </p>
         ) : locked ? (
           <p className="text-center text-xs text-ink-dim">
@@ -488,21 +488,23 @@ export default function Finais() {
 
   async function load() {
     try {
-      const d = await KnockoutAPI.get();
+      const [d, proj] = await Promise.all([KnockoutAPI.get(), KnockoutAPI.projection()]);
       setData(d);
       const r32 = (d.stages ?? []).find(s => s.key === 'LAST_32')?.matches ?? [];
-      if (!r32.some(m => m.home || m.away)) {
-        setProjection(await KnockoutAPI.projection());
-      } else {
-        setProjection(null);
-      }
+      // Mostra projeção enquanto não há times confirmados na R32
+      setProjection(r32.some(m => m.home || m.away) ? null : proj);
       setError(null);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   }
 
   const reloadSilent = useCallback(async () => {
-    try { setData(await KnockoutAPI.get()); } catch {}
+    try {
+      const [d, proj] = await Promise.all([KnockoutAPI.get(), KnockoutAPI.projection()]);
+      setData(d);
+      const r32 = (d.stages ?? []).find(s => s.key === 'LAST_32')?.matches ?? [];
+      setProjection(r32.some(m => m.home || m.away) ? null : proj);
+    } catch {}
   }, []);
 
   // SSE: atualiza instantaneamente quando scoresFetcher grava placar no banco

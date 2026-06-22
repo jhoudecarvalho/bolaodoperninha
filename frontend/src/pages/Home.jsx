@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MatchesAPI, RankingAPI } from '../api/client.js';
+import { MatchesAPI, PredictionsAPI, RankingAPI } from '../api/client.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import LiveBanner from '../components/LiveBanner.jsx';
 import MatchCard from '../components/MatchCard.jsx';
@@ -22,21 +22,64 @@ export default function Home() {
   const [live, setLive] = useState([]);
   const [upcoming, setUpcoming] = useState([]);
   const [ranking, setRanking] = useState([]);
+  // Predictions pré-carregadas para evitar 20 chamadas individuais nos MatchCards
+  const [predsByMatch, setPredsByMatch] = useState({});
+  const [myPredsByMatch, setMyPredsByMatch] = useState({});
+  // Timestamp (ms) em que o último jogo recentemente encerrado vai sair do banner
+  const [recentExpiry, setRecentExpiry] = useState(null);
 
   async function load() {
+    const playerId = user?.player_id;
     const [liveData, up, rk] = await Promise.all([
       MatchesAPI.list({ status: 'in_progress' }).catch(() => []),
       MatchesAPI.upcoming(10).catch(() => []),
       RankingAPI.list().catch(() => []),
     ]);
     setLive(liveData);
+
+    // Calcula quando o último jogo "recentemente encerrado" vai sair da janela de 20 min
+    const TWENTY_MIN = 20 * 60 * 1000;
+    const finishedWithTs = liveData.filter((m) => m.status === 'finished' && m.result_updated_at);
+    if (finishedWithTs.length) {
+      const expiries = finishedWithTs.map((m) => new Date(m.result_updated_at).getTime() + TWENTY_MIN);
+      setRecentExpiry(Math.min(...expiries));
+    } else {
+      setRecentExpiry(null);
+    }
+
     setUpcoming(up);
     setRanking(rk);
+
+    // Busca palpites em lote: 1 chamada para todos os jogos + 1 para o usuário
+    if (up.length) {
+      const ids = up.map((m) => m.id);
+      const [allPreds, myPreds] = await Promise.all([
+        PredictionsAPI.byMatches(ids).catch(() => []),
+        playerId ? PredictionsAPI.byPlayer(playerId).catch(() => []) : [],
+      ]);
+      const byMatch = {};
+      for (const p of allPreds) {
+        if (!byMatch[p.match_id]) byMatch[p.match_id] = [];
+        byMatch[p.match_id].push(p);
+      }
+      setPredsByMatch(byMatch);
+      const myMap = {};
+      for (const p of myPreds) myMap[p.match_id] = p;
+      setMyPredsByMatch(myMap);
+    }
   }
 
   useEffect(() => {
     load();
   }, []);
+
+  // Remove o banner "ENCERRADO" quando os 20 min expirarem
+  useEffect(() => {
+    if (!recentExpiry) return;
+    const delay = Math.max(0, recentExpiry - Date.now());
+    const timer = setTimeout(() => load(), delay);
+    return () => clearTimeout(timer);
+  }, [recentExpiry]);
 
   useSSE({ result: load, ranking: load });
 
@@ -99,6 +142,8 @@ export default function Home() {
                 playerName={!isAdmin ? user?.name : ''}
                 showPredictions
                 showQuickPredict={!isAdmin && !!user?.player_id}
+                matchPredictions={predsByMatch[m.id]}
+                myPrediction={myPredsByMatch[m.id]}
                 onSaved={load}
               />
             ))}

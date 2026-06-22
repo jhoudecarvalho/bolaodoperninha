@@ -4,11 +4,15 @@ import { broadcast } from '../sse/broker.js';
 /**
  * Busca placares das APIs externas e atualiza a tabela `matches`.
  * Fontes (em ordem de prioridade):
- *   1. worldcup26.ir        (tempo real, sem auth)
- *   2. football-data.org    (confiável, requer token, live scores)
- *   3. openfootball         (GitHub raw, último recurso — só calendário)
+ *   1. ESPN                 (primária — tempo real, sem auth, muito confiável)
+ *   2. worldcup26.ir        (secundária — enriquece goleadores, cross-valida ESPN)
+ *   3. football-data.org    (desempatador de conflitos ESPN × worldcup26.ir)
+ *   4. openfootball         (GitHub raw, último recurso — só calendário)
  */
 
+const ESPN_URL =
+  process.env.ESPN_API_URL ||
+  'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard';
 const PRIMARY = process.env.SCORES_API_PRIMARY || 'https://worldcup26.ir/get/games';
 const FOOTBALL_DATA_URL = 'https://api.football-data.org/v4/competitions/WC/matches';
 const FOOTBALL_DATA_TOKEN = process.env.FOOTBALL_DATA_TOKEN || '';
@@ -200,6 +204,88 @@ function parseFootballData(data) {
   return out;
 }
 
+function parseESPN(data) {
+  const out = [];
+  for (const event of data?.events || []) {
+    const comp = event.competitions?.[0];
+    if (!comp) continue;
+
+    const state    = comp.status?.type?.state || '';
+    const typeName = comp.status?.type?.name  || '';
+    const finished = state === 'post';
+    const paused   = typeName === 'STATUS_HALFTIME' || typeName === 'STATUS_SUSPENDED';
+    const hasScore = finished || paused || state === 'in';
+
+    let home = null, away = null;
+    for (const c of comp.competitors || []) {
+      const name  = normalizeName(c.team?.displayName);
+      const score = hasScore ? Number(c.score) : null;
+      if (c.homeAway === 'home') home = { name, score };
+      else if (c.homeAway === 'away') away = { name, score };
+    }
+    if (!home || !away) continue;
+
+    // Minuto ao vivo a partir do displayClock ("67'" ou "45'+2'")
+    let minute = null, injuryTime = null;
+    if (!finished && !paused && state === 'in') {
+      const clock = comp.status?.displayClock || '';
+      const plus   = clock.match(/^(\d+)'\+(\d+)'$/);
+      const simple = clock.match(/^(\d+)'$/);
+      if (plus)   { minute = Number(plus[1]);   injuryTime = Number(plus[2]); }
+      else if (simple) { minute = Number(simple[1]); }
+    }
+
+    // Goleadores a partir do array details (inclui gols contra e pênaltis)
+    const teamSide = {};
+    for (const c of comp.competitors || []) teamSide[c.team?.id] = c.homeAway;
+    const homeScorers = [], awayScorers = [];
+    for (const d of comp.details || []) {
+      if (!d.scoringPlay) continue;
+      const side = teamSide[d.team?.id];
+      const name = d.athletesInvolved?.[0]?.shortName || d.athletesInvolved?.[0]?.displayName || '?';
+      const min  = Number((d.clock?.displayValue || '').replace(/[^0-9]/g, '')) || 0;
+      if (side === 'home') homeScorers.push({ name, minute: min });
+      else if (side === 'away') awayScorers.push({ name, minute: min });
+    }
+
+    // Vencedor (null em caso de empate)
+    let winner = null;
+    if (finished) {
+      for (const c of comp.competitors || []) {
+        if (c.winner) { winner = c.homeAway; break; }
+      }
+    }
+
+    // Estádio e público
+    const venue      = comp.venue?.fullName || null;
+    const attendance = comp.attendance ? Number(comp.attendance) : null;
+
+    // Estatísticas por time (posse, chutes, finalizações no gol, escanteios, faltas)
+    const STAT_KEYS = { possessionPct: 'possession', totalShots: 'shots', shotsOnTarget: 'shotsOnTarget', wonCorners: 'corners', foulsCommitted: 'fouls' };
+    let homeStats = null, awayStats = null;
+    for (const c of comp.competitors || []) {
+      if (!c.statistics?.length) continue;
+      const stats = {};
+      for (const s of c.statistics) {
+        if (STAT_KEYS[s.name]) stats[STAT_KEYS[s.name]] = Number(s.displayValue);
+      }
+      if (Object.keys(stats).length) {
+        if (c.homeAway === 'home') homeStats = stats;
+        else if (c.homeAway === 'away') awayStats = stats;
+      }
+    }
+
+    out.push({
+      home: home.name, away: away.name,
+      homeScore: home.score, awayScore: away.score,
+      finished, paused, minute, injuryTime,
+      homeScorers, awayScorers, winner,
+      venue, attendance, homeStats, awayStats,
+    });
+  }
+  return out;
+}
+
 function pickScore(...vals) {
   for (const v of vals) {
     if (v != null && v !== '' && !Number.isNaN(Number(v))) return Number(v);
@@ -233,49 +319,127 @@ export async function syncScores() {
   let games = [];
   let source = null;
 
-  // Busca primária e football-data.org em paralelo.
-  // football-data.org é sempre consultada para jogos ao vivo (IN_PLAY/PAUSED/FINISHED)
-  // e sobrescreve a primária quando esta ainda não atualizou o jogo.
-  const [primaryResult, fdResult] = await Promise.allSettled([
+  const fmtDate = (d) => d.toISOString().slice(0, 10).replace(/-/g, '');
+  const todayUTC     = fmtDate(new Date());
+  const yesterdayUTC = fmtDate(new Date(Date.now() - 86400000));
+
+  // Busca todas as fontes em paralelo
+  const [espnToday, espnYesterday, primaryResult, fdResult] = await Promise.allSettled([
+    fetchJson(`${ESPN_URL}?dates=${todayUTC}`,     15000),
+    fetchJson(`${ESPN_URL}?dates=${yesterdayUTC}`, 15000),
     fetchJson(PRIMARY),
     FOOTBALL_DATA_TOKEN
       ? fetchJson(`${FOOTBALL_DATA_URL}?status=IN_PLAY,PAUSED,FINISHED`, 15000, { 'X-Auth-Token': FOOTBALL_DATA_TOKEN })
       : Promise.reject(new Error('sem token')),
   ]);
 
-  if (primaryResult.status === 'fulfilled') {
-    games = parsePrimary(primaryResult.value);
-    if (games.length) source = 'primary';
-  } else {
-    console.warn('⚠️  API primária falhou:', primaryResult.reason.message);
+  const key = (h, a) => `${h.toLowerCase()}|${a.toLowerCase()}`;
+
+  // ── 1. ESPN como fonte primária ────────────────────────────────────────────
+  // Ontem entra primeiro; hoje sobrescreve em caso de duplicata no Map
+  const espnGames = [
+    ...(espnYesterday.status === 'fulfilled' ? parseESPN(espnYesterday.value) : []),
+    ...(espnToday.status    === 'fulfilled' ? parseESPN(espnToday.value)    : []),
+  ];
+  const espnMap = new Map(espnGames.map((g) => [key(g.home, g.away), g]));
+
+  if (espnToday.status !== 'fulfilled' && espnYesterday.status !== 'fulfilled') {
+    console.warn('⚠️  ESPN indisponível:', espnToday.reason?.message);
   }
 
-  // Mescla football-data.org: sobrescreve jogos que ela conhece (ao vivo/encerrado).
-  // Goleadores da fonte primária são preservados quando football-data.org não fornece.
-  if (fdResult.status === 'fulfilled') {
-    const fdGames = parseFootballData(fdResult.value);
-    if (fdGames.length) {
-      const fdKey = (h, a) => `${h.toLowerCase()}|${a.toLowerCase()}`;
-      const fdMap = new Map(fdGames.map((g) => [fdKey(g.home, g.away), g]));
-      games = games.map((g) => {
-        const fd = fdMap.get(fdKey(g.home, g.away));
-        if (!fd) return g;
-        return {
-          ...fd,
-          homeScorers: fd.homeScorers?.length ? fd.homeScorers : g.homeScorers,
-          awayScorers: fd.awayScorers?.length ? fd.awayScorers : g.awayScorers,
-        };
-      });
-      // Adiciona jogos que só a football-data.org conhece
-      for (const [k, g] of fdMap) {
-        if (!games.some((pg) => fdKey(pg.home, pg.away) === k)) games.push(g);
+  // ── 2. worldcup26.ir como fonte secundária ─────────────────────────────────
+  const primaryGames = primaryResult.status === 'fulfilled'
+    ? parsePrimary(primaryResult.value)
+    : [];
+  if (primaryResult.status !== 'fulfilled') {
+    console.warn('⚠️  Fonte secundária (worldcup26.ir) falhou:', primaryResult.reason?.message);
+  }
+  const primaryMap = new Map(primaryGames.map((g) => [key(g.home, g.away), g]));
+
+  // ── 3. Mescla + cross-validation ESPN × worldcup26.ir ─────────────────────
+  const skipKeys = new Set();
+
+  if (espnMap.size) {
+    source = 'espn';
+
+    for (const [k, g] of espnMap) {
+      const p = primaryMap.get(k);
+
+      if (g.finished && g.homeScore != null) {
+        if (!p || p.homeScore == null) {
+          // Só ESPN tem resultado — avisa para conferir
+          console.warn(
+            `⚠️  FONTE ÚNICA: ${g.home} ${g.homeScore}×${g.awayScore} ${g.away}` +
+            ` — worldcup26.ir sem dados. Confirmar!`
+          );
+        } else if (p.finished && (g.homeScore !== p.homeScore || g.awayScore !== p.awayScore)) {
+          // Ambas têm resultado final mas discordam — bloqueia até resolver
+          console.error(
+            `🚨 CONFLITO: ${g.home} × ${g.away}` +
+            ` — ESPN: ${g.homeScore}×${g.awayScore} | worldcup26.ir: ${p.homeScore}×${p.awayScore}`
+          );
+          skipKeys.add(k);
+        }
       }
-      source = source ? `${source}+fd` : 'football-data';
+
+      // Enriquece ESPN com goleadores da secundária quando ESPN não tem
+      espnMap.set(k, {
+        ...g,
+        homeScorers: g.homeScorers?.length ? g.homeScorers : (p?.homeScorers || []),
+        awayScorers: g.awayScorers?.length ? g.awayScorers : (p?.awayScorers || []),
+      });
     }
-  } else if (!games.length) {
-    console.warn('⚠️  football-data.org falhou:', fdResult.reason.message);
+
+    // Jogos que só a secundária conhece (ESPN não trouxe)
+    for (const [k, p] of primaryMap) {
+      if (!espnMap.has(k)) espnMap.set(k, p);
+    }
+
+    games = [...espnMap.values()];
+    if (primaryGames.length) source = 'espn+worldcup26';
+
+  } else if (primaryGames.length) {
+    // ESPN indisponível: worldcup26.ir assume o papel de primária
+    games = primaryGames;
+    source = 'worldcup26';
+    console.warn('⚠️  ESPN indisponível, usando worldcup26.ir como fonte primária');
   }
 
+  // ── 4. football-data.org como desempatador de conflitos ───────────────────
+  if (skipKeys.size) {
+    if (fdResult.status === 'fulfilled') {
+      const fdGames = parseFootballData(fdResult.value);
+      const fdMap   = new Map(fdGames.map((g) => [key(g.home, g.away), g]));
+
+      for (const k of [...skipKeys]) {
+        const fd   = fdMap.get(k);
+        const espn = espnMap.get(k);
+        const prim = primaryMap.get(k);
+        if (!fd?.finished || fd.homeScore == null) continue;
+
+        if (fd.homeScore === espn?.homeScore && fd.awayScore === espn?.awayScore) {
+          console.log(`✅ CONFLITO RESOLVIDO (ESPN confirmada por fd.org): ${espn.home} × ${espn.away} ${fd.homeScore}×${fd.awayScore}`);
+          skipKeys.delete(k);
+        } else if (fd.homeScore === prim?.homeScore && fd.awayScore === prim?.awayScore) {
+          console.log(`✅ CONFLITO RESOLVIDO (worldcup26 confirmada por fd.org): ${prim.home} × ${prim.away} ${fd.homeScore}×${fd.awayScore}`);
+          const idx = games.findIndex((g) => key(g.home, g.away) === k);
+          if (idx >= 0) games[idx] = { ...games[idx], homeScore: prim.homeScore, awayScore: prim.awayScore };
+          skipKeys.delete(k);
+        } else {
+          console.error(
+            `🚨 CONFLITO SEM RESOLUÇÃO: ${espn?.home} × ${espn?.away}` +
+            ` — ESPN: ${espn?.homeScore}×${espn?.awayScore}` +
+            ` | worldcup26: ${prim?.homeScore}×${prim?.awayScore}` +
+            ` | fd.org: ${fd.homeScore}×${fd.awayScore} — mantendo banco`
+          );
+        }
+      }
+    } else {
+      console.warn(`⚠️  ${skipKeys.size} conflito(s) sem resolução — fd.org indisponível`);
+    }
+  }
+
+  // ── 5. Fallback final: openfootball ───────────────────────────────────────
   if (!games.length) {
     try {
       const data = await fetchJson(FALLBACK);
@@ -287,7 +451,6 @@ export async function syncScores() {
   }
 
   if (!games.length) {
-    // Atualiza status por tempo mesmo sem dados da API
     await updateMatchStatuses();
     console.log('ℹ️  Nenhum jogo retornado pelas APIs.');
     return { updated: 0, source: null };
@@ -297,20 +460,24 @@ export async function syncScores() {
   const [matches] = await pool.query(
     `SELECT m.id, m.group_id, m.home_score, m.away_score, m.status, m.result_source,
             m.live_minute, m.home_scorers, m.away_scorers, m.winner,
+            m.venue, m.attendance, m.home_stats, m.away_stats,
             t1.name_en AS home_en, t2.name_en AS away_en
      FROM matches m
      JOIN teams t1 ON t1.id = m.home_team_id
      JOIN teams t2 ON t2.id = m.away_team_id`
   );
 
-  const key = (h, a) => `${h.toLowerCase()}|${a.toLowerCase()}`;
   const index = new Map();
   for (const m of matches) index.set(key(m.home_en, m.away_en), m);
 
   let updated = 0;
   for (const g of games) {
-    const m = index.get(key(g.home, g.away));
+    const k = key(g.home, g.away);
+    const m = index.get(k);
     if (!m) continue;
+
+    // Não atualiza jogos com conflito não resolvido
+    if (skipKeys.has(k)) continue;
 
     // API retractou um finished=TRUE falso: volta para scheduled e limpa o placar injetado
     if (!g.finished && !g.paused && g.homeScore == null &&
@@ -344,34 +511,49 @@ export async function syncScores() {
     // Não sobrescrever resultado inserido manualmente
     if (m.result_source === 'manual') continue;
 
-    const newStatus = g.finished ? 'finished' : g.paused ? 'paused' : 'live';
-    const newMinute = g.finished ? null : (g.minute ?? null);
-    const newInjury = g.finished ? null : (g.injuryTime ?? null);
-    const newHomeScorers = g.homeScorers?.length ? JSON.stringify(g.homeScorers) : null;
-    const newAwayScorers = g.awayScorers?.length ? JSON.stringify(g.awayScorers) : null;
+    const newStatus      = g.finished ? 'finished' : g.paused ? 'paused' : 'live';
+    const newMinute      = g.finished ? null : (g.minute ?? null);
+    const newInjury      = g.finished ? null : (g.injuryTime ?? null);
+    const newHomeScorers = g.homeScorers?.length  ? JSON.stringify(g.homeScorers)  : null;
+    const newAwayScorers = g.awayScorers?.length  ? JSON.stringify(g.awayScorers)  : null;
+    const newHomeStats   = g.homeStats             ? JSON.stringify(g.homeStats)    : null;
+    const newAwayStats   = g.awayStats             ? JSON.stringify(g.awayStats)    : null;
+    const newVenue       = g.venue       || null;
+    const newAttendance  = g.attendance  ?? null;
 
-    // Pula se placar, status, minuto e goleadores já estão atualizados
+    // Pula se nada mudou
     const scorersUnchanged =
       (newHomeScorers == null || m.home_scorers != null) &&
       (newAwayScorers == null || m.away_scorers != null);
+    const statsUnchanged =
+      (newHomeStats == null || m.home_stats != null) &&
+      (newAwayStats == null || m.away_stats != null);
     if (
-      m.home_score === g.homeScore &&
-      m.away_score === g.awayScore &&
-      m.status === newStatus &&
-      m.live_minute === newMinute &&
-      scorersUnchanged
+      m.home_score  === g.homeScore &&
+      m.away_score  === g.awayScore &&
+      m.status      === newStatus   &&
+      m.live_minute === newMinute   &&
+      scorersUnchanged && statsUnchanged &&
+      (newVenue == null || m.venue) &&
+      (newAttendance == null || m.attendance)
     ) continue;
 
     await pool.query(
       `UPDATE matches
-         SET home_score = ?, away_score = ?, status = ?,
+         SET home_score  = ?, away_score  = ?, status = ?,
              live_minute = ?, live_injury_time = ?,
              home_scorers = COALESCE(?, home_scorers),
              away_scorers = COALESCE(?, away_scorers),
-             winner = COALESCE(?, winner),
+             winner       = COALESCE(?, winner),
+             venue        = COALESCE(?, venue),
+             attendance   = COALESCE(?, attendance),
+             home_stats   = COALESCE(?, home_stats),
+             away_stats   = COALESCE(?, away_stats),
              result_source = 'api', result_updated_at = UTC_TIMESTAMP()
        WHERE id = ?`,
-      [g.homeScore, g.awayScore, newStatus, newMinute, newInjury, newHomeScorers, newAwayScorers, g.winner ?? null, m.id]
+      [g.homeScore, g.awayScore, newStatus, newMinute, newInjury,
+       newHomeScorers, newAwayScorers, g.winner ?? null,
+       newVenue, newAttendance, newHomeStats, newAwayStats, m.id]
     );
     broadcast('result', {
       match_id: m.id,
@@ -394,6 +576,85 @@ export async function syncScores() {
 
   console.log(`✅ Sincronização concluída (${source}): ${updated} resultados atualizados`);
   return { updated, source };
+}
+
+/**
+ * Preenche venue/attendance/stats para todos os jogos encerrados que ainda
+ * não têm esses dados, buscando a ESPN por data.
+ */
+export async function backfillStats() {
+  const [rows] = await pool.query(
+    `SELECT m.id,
+            DATE_FORMAT(m.kick_off_utc,'%Y%m%d') AS date_str,
+            DATE_FORMAT(DATE_SUB(m.kick_off_utc, INTERVAL 1 DAY),'%Y%m%d') AS prev_date_str,
+            t1.name_en AS home_en, t2.name_en AS away_en
+     FROM matches m
+     JOIN teams t1 ON t1.id = m.home_team_id
+     JOIN teams t2 ON t2.id = m.away_team_id
+     WHERE m.status = 'finished'
+       AND (m.home_stats IS NULL OR m.away_stats IS NULL OR m.attendance IS NULL)
+       AND m.result_source != 'manual'`
+  );
+
+  if (!rows.length) return { updated: 0 };
+
+  const key = (h, a) => `${h.toLowerCase()}|${a.toLowerCase()}`;
+
+  // Agrupa por data UTC e também adiciona o dia anterior (ESPN usa data local US, UTC-5 a UTC-7)
+  const byDate = new Map();
+  for (const r of rows) {
+    for (const d of [r.date_str, r.prev_date_str]) {
+      if (!byDate.has(d)) byDate.set(d, []);
+      byDate.get(d).push(r);
+    }
+  }
+
+  let updated = 0;
+  const alreadyUpdated = new Set();
+
+  for (const [dateStr, matches] of byDate) {
+    let espnData;
+    try {
+      espnData = await fetchJson(`${ESPN_URL}?dates=${dateStr}`, 20000);
+    } catch (err) {
+      console.warn(`⚠️  Backfill ESPN ${dateStr} falhou:`, err.message);
+      continue;
+    }
+
+    const espnGames = parseESPN(espnData);
+    const espnMap = new Map(espnGames.map((g) => [key(g.home, g.away), g]));
+
+    for (const m of matches) {
+      if (alreadyUpdated.has(m.id)) continue;
+      const g = espnMap.get(key(m.home_en, m.away_en));
+      if (!g) continue;
+      if (!g.venue && !g.attendance && !g.homeStats && !g.awayStats) continue;
+
+      await pool.query(
+        `UPDATE matches
+           SET venue      = COALESCE(venue, ?),
+               attendance = COALESCE(attendance, ?),
+               home_stats = COALESCE(home_stats, ?),
+               away_stats = COALESCE(away_stats, ?)
+         WHERE id = ?`,
+        [
+          g.venue       || null,
+          g.attendance  ?? null,
+          g.homeStats   ? JSON.stringify(g.homeStats) : null,
+          g.awayStats   ? JSON.stringify(g.awayStats) : null,
+          m.id,
+        ]
+      );
+      alreadyUpdated.add(m.id);
+      updated++;
+    }
+
+    // Pausa pequena para não martelar a ESPN
+    await new Promise((r) => setTimeout(r, 300));
+  }
+
+  console.log(`✅ Backfill stats: ${updated} jogos atualizados`);
+  return { updated };
 }
 
 // ── Sync de placares disparado no login (em segundo plano) ───────────────────
@@ -433,18 +694,46 @@ export async function syncScoresOnLogin() {
   }
 }
 
-let interval = null;
+let _syncTimer = null;
+let _syncRunning = false;
+
+async function _syncLoop() {
+  if (_syncRunning) return;
+  _syncRunning = false;
+
+  // Jogo ao vivo? → 10s. Recém-encerrado (até 20 min)? → 30s. Sem ao vivo → 120s.
+  const LIVE_MS   = Number(process.env.SCORES_SYNC_LIVE_MS)   || 10_000;
+  const RECENT_MS = Number(process.env.SCORES_SYNC_RECENT_MS) || 30_000;
+  const IDLE_MS   = Number(process.env.SCORES_SYNC_IDLE_MS)   || 120_000;
+
+  try {
+    const [[liveRow]] = await pool.query(
+      "SELECT COUNT(*) AS n FROM matches WHERE status IN ('live','paused')"
+    );
+    const [[recentRow]] = await pool.query(
+      "SELECT COUNT(*) AS n FROM matches WHERE status = 'finished' AND result_updated_at >= UTC_TIMESTAMP() - INTERVAL 20 MINUTE"
+    );
+    const hasLive   = Number(liveRow.n) > 0;
+    const hasRecent = Number(recentRow.n) > 0;
+    const delay     = hasLive ? LIVE_MS : hasRecent ? RECENT_MS : IDLE_MS;
+
+    await syncScores().catch((e) => console.error('Erro no sync:', e.message));
+
+    _syncTimer = setTimeout(_syncLoop, delay);
+    if (hasLive)   console.log(`⚡ Ao vivo detectado — próximo sync em ${delay / 1000}s`);
+    else if (hasRecent) console.log(`⏱️  Jogo recém-encerrado — próximo sync em ${delay / 1000}s`);
+  } catch {
+    _syncTimer = setTimeout(_syncLoop, IDLE_MS);
+  }
+}
 
 export function startScoresSync() {
-  const ms = Number(process.env.SCORES_SYNC_INTERVAL_MS) || 120000;
   // Primeira execução logo após o boot
   syncScores().catch((e) => console.error('Erro no sync inicial:', e.message));
-  interval = setInterval(() => {
-    syncScores().catch((e) => console.error('Erro no sync:', e.message));
-  }, ms);
-  console.log(`⏱️  Sync de placares a cada ${ms / 1000}s`);
+  _syncTimer = setTimeout(_syncLoop, 10_000);
+  console.log('⏱️  Sync adaptativo: 10s ao vivo / 120s idle');
 }
 
 export function stopScoresSync() {
-  if (interval) clearInterval(interval);
+  if (_syncTimer) clearTimeout(_syncTimer);
 }

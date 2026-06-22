@@ -42,6 +42,10 @@ export default function MatchTimer({ kickoffUtc, status, liveMinute, liveInjuryT
     return () => clearInterval(id);
   }, [kickoffUtc, status, liveMinute, liveInjuryTime]);
 
+  if (status === 'finished') {
+    return <span className={`text-ink-mut font-medium ${className}`}>Encerrado</span>;
+  }
+
   if (info.label === 'Intervalo') {
     return <span className={`text-warn font-medium ${className}`}>⏸ Intervalo</span>;
   }

@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react';
 import { PredictionsAPI } from '../api/client.js';
 import MatchTimer from './MatchTimer.jsx';
-
 function parseScorers(raw) {
   if (!raw) return [];
   try { return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return []; }
+}
+
+function parseStats(raw) {
+  if (!raw) return null;
+  try { return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return null; }
 }
 
 function liveOutcome(h, a) {
@@ -26,12 +30,22 @@ export default function LiveBanner({ matches = [] }) {
 
   if (!matches.length) return null;
 
-  const allPaused = matches.every((m) => m.status === 'paused');
+  const allPaused    = matches.every((m) => m.status === 'paused');
+  const allFinished  = matches.every((m) => m.status === 'finished');
+  const anyLive      = matches.some((m) => m.status === 'live');
+
+  const headerColor = allFinished ? 'text-ink-mut' : allPaused ? 'text-warn' : 'text-ok';
+  const borderColor = allFinished ? 'border-ink-dim/30' : 'border-ok/40';
+  const bgGradient  = allFinished
+    ? 'bg-gradient-to-r from-[#1a1a1a] to-bg-700'
+    : 'bg-gradient-to-r from-[#0f2a12] to-bg-700';
 
   return (
-    <div className="card border-ok/40 bg-gradient-to-r from-[#0f2a12] to-bg-700 p-4 animate-fadeIn">
+    <div className={`card ${borderColor} ${bgGradient} p-4 animate-fadeIn`}>
       <div className="mb-3 flex items-center gap-2">
-        {allPaused ? (
+        {allFinished ? (
+          <span>✅</span>
+        ) : allPaused ? (
           <span className="text-warn">⏸</span>
         ) : (
           <span className="relative flex h-3 w-3">
@@ -39,11 +53,17 @@ export default function LiveBanner({ matches = [] }) {
             <span className="relative inline-flex h-3 w-3 rounded-full bg-ok" />
           </span>
         )}
-        <span className={`font-display text-lg font-bold ${allPaused ? 'text-warn' : 'text-ok'}`}>
-          {allPaused ? 'PAUSADO' : 'AO VIVO'}
+        <span className={`font-display text-lg font-bold ${headerColor}`}>
+          {allFinished
+            ? (matches.length > 1 ? `${matches.length} JOGOS ENCERRADOS` : 'ENCERRADO')
+            : allPaused
+            ? 'PAUSADO'
+            : matches.length > 1
+            ? `${matches.length} JOGOS EM ANDAMENTO`
+            : 'AO VIVO'}
         </span>
       </div>
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {matches.map((m) => (
           <div
             key={m.id}
@@ -51,7 +71,7 @@ export default function LiveBanner({ matches = [] }) {
           >
             <div className="flex items-center justify-between">
               <span>{m.home_flag} {m.home_name}</span>
-              <span className={`font-bold tabular-nums ${m.status === 'paused' ? 'text-warn' : 'text-gold'}`}>
+              <span className={`font-bold tabular-nums ${m.status === 'finished' ? 'text-ink' : m.status === 'paused' ? 'text-warn' : 'text-gold'}`}>
                 {m.home_score ?? 0} × {m.away_score ?? 0}
               </span>
               <span>{m.away_name} {m.away_flag}</span>
@@ -138,6 +158,52 @@ export default function LiveBanner({ matches = [] }) {
                       ))}
                     </div>
                   )}
+                </div>
+              );
+            })()}
+
+            {/* Estádio, público e estatísticas completas */}
+            {(() => {
+              const hs = parseStats(m.home_stats);
+              const as = parseStats(m.away_stats);
+              const hasStats = hs || as;
+              if (!m.venue && !m.attendance && !hasStats) return null;
+              const ROWS = [
+                { label: 'Posse (%)',   hv: hs?.possession,    av: as?.possession },
+                { label: 'Chutes',      hv: hs?.shots,         av: as?.shots },
+                { label: 'No gol',      hv: hs?.shotsOnTarget, av: as?.shotsOnTarget },
+                { label: 'Escanteios', hv: hs?.corners,       av: as?.corners },
+                { label: 'Faltas',      hv: hs?.fouls,         av: as?.fouls },
+              ].filter((r) => r.hv != null || r.av != null);
+              return (
+                <div className="mt-3 border-t border-white/10 pt-2 space-y-1.5">
+                  {(m.venue || m.attendance) && (
+                    <div className="text-center text-xs text-ink-dim">
+                      📍 {m.venue}
+                      {m.attendance && (
+                        <span className="ml-2">· 👥 {Number(m.attendance).toLocaleString('pt-BR')}</span>
+                      )}
+                    </div>
+                  )}
+                  {ROWS.map(({ label, hv, av }) => {
+                    const h = hv ?? 0;
+                    const a = av ?? 0;
+                    const total = h + a || 1;
+                    const homePct = (h / total) * 100;
+                    return (
+                      <div key={label} className="grid grid-cols-[2.5rem_1fr_4.5rem_1fr_2.5rem] items-center gap-1.5 text-xs">
+                        <span className="text-right tabular-nums font-semibold text-ink">{hv ?? '–'}</span>
+                        <div className="flex h-1.5 overflow-hidden rounded-full bg-black/30 justify-end">
+                          <div className="h-full rounded-full bg-gold transition-all duration-500" style={{ width: `${homePct}%` }} />
+                        </div>
+                        <span className="text-center text-ink-dim">{label}</span>
+                        <div className="h-1.5 overflow-hidden rounded-full bg-black/30">
+                          <div className="h-full rounded-full bg-ink-dim transition-all duration-500" style={{ width: `${100 - homePct}%` }} />
+                        </div>
+                        <span className="tabular-nums font-semibold text-ink">{av ?? '–'}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               );
             })()}

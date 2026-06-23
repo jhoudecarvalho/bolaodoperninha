@@ -699,12 +699,14 @@ let _syncRunning = false;
 
 async function _syncLoop() {
   if (_syncRunning) return;
-  _syncRunning = false;
+  _syncRunning = true;
 
   // Jogo ao vivo? → 10s. Recém-encerrado (até 20 min)? → 30s. Sem ao vivo → 120s.
   const LIVE_MS   = Number(process.env.SCORES_SYNC_LIVE_MS)   || 10_000;
   const RECENT_MS = Number(process.env.SCORES_SYNC_RECENT_MS) || 30_000;
   const IDLE_MS   = Number(process.env.SCORES_SYNC_IDLE_MS)   || 120_000;
+  // Máximo de jogos simultâneos ao vivo esperados; acima disso usa intervalo conservador.
+  const MAX_CONCURRENT_LIVE = envInt('SCORES_MAX_CONCURRENT_LIVE', 3);
 
   try {
     const [[liveRow]] = await pool.query(
@@ -713,17 +715,35 @@ async function _syncLoop() {
     const [[recentRow]] = await pool.query(
       "SELECT COUNT(*) AS n FROM matches WHERE status = 'finished' AND result_updated_at >= UTC_TIMESTAMP() - INTERVAL 20 MINUTE"
     );
-    const hasLive   = Number(liveRow.n) > 0;
-    const hasRecent = Number(recentRow.n) > 0;
-    const delay     = hasLive ? LIVE_MS : hasRecent ? RECENT_MS : IDLE_MS;
+    const liveCount   = Number(liveRow.n);
+    const hasLive     = liveCount > 0;
+    const tooManyLive = liveCount > MAX_CONCURRENT_LIVE;
+    const hasRecent   = Number(recentRow.n) > 0;
+
+    let delay;
+    if (hasLive && !tooManyLive) {
+      delay = LIVE_MS;
+    } else if (tooManyLive) {
+      delay = RECENT_MS;
+      console.warn(
+        `⚠️  ${liveCount} jogos ao vivo simultâneos (esperado ≤ ${MAX_CONCURRENT_LIVE})` +
+        ` — possível dado preso. Sync conservador em ${delay / 1000}s`
+      );
+    } else if (hasRecent) {
+      delay = RECENT_MS;
+    } else {
+      delay = IDLE_MS;
+    }
 
     await syncScores().catch((e) => console.error('Erro no sync:', e.message));
 
     _syncTimer = setTimeout(_syncLoop, delay);
-    if (hasLive)   console.log(`⚡ Ao vivo detectado — próximo sync em ${delay / 1000}s`);
+    if (hasLive && !tooManyLive) console.log(`⚡ Ao vivo detectado (${liveCount}) — próximo sync em ${delay / 1000}s`);
     else if (hasRecent) console.log(`⏱️  Jogo recém-encerrado — próximo sync em ${delay / 1000}s`);
   } catch {
     _syncTimer = setTimeout(_syncLoop, IDLE_MS);
+  } finally {
+    _syncRunning = false;
   }
 }
 

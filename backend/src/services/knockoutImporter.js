@@ -115,16 +115,27 @@ export async function importKnockoutMatches() {
       // Labels amigáveis: "Group A 2nd Place" → "2º Grupo A"
       const fmtLabel = (raw) => {
         if (!raw) return null;
-        const gm = raw.match(/Group ([A-L]) (\d+)(?:st|nd|rd|th) Place/i);
-        if (gm) return `${gm[2]}º Grupo ${gm[1]}`;
-        const wm = raw.match(/Round of 32 (\d+) Winner/i);
-        if (wm) return `Vencedor R32 #${wm[1]}`;
-        const qm = raw.match(/Quarterfinal (\d+) Winner/i);
-        if (qm) return `Vencedor QF #${qm[1]}`;
-        const sm = raw.match(/Semifinal (\d+) (Winner|Loser)/i);
-        if (sm) return `${sm[2] === 'Winner' ? 'Vencedor' : 'Perdedor'} SF #${sm[1]}`;
-        const rm = raw.match(/Round of 16 (\d+) Winner/i);
-        if (rm) return `Vencedor R16 #${rm[1]}`;
+        // "Group A 2nd Place" → "2º Grupo A"
+        const pm = raw.match(/Group ([A-L]) (\d+)(?:st|nd|rd|th) Place/i);
+        if (pm) return `${pm[2]}º Grupo ${pm[1]}`;
+        // "Group C Winner" → "1º Grupo C"
+        const gw = raw.match(/^Group ([A-L]) Winner$/i);
+        if (gw) return `1º Grupo ${gw[1]}`;
+        // "Third Place Group A/B/C/D/F" → "3º Lugar (A/B/C/D/F)"
+        const tp = raw.match(/Third Place Group ([A-L/]+)/i);
+        if (tp) return `3º Lugar (${tp[1]})`;
+        // "Round of 32 N Winner" → "Vencedor R32 #N"
+        const r32 = raw.match(/Round of 32 (\d+) Winner/i);
+        if (r32) return `Vencedor R32 #${r32[1]}`;
+        // "Round of 16 N Winner" → "Vencedor R16 #N"
+        const r16 = raw.match(/Round of 16 (\d+) Winner/i);
+        if (r16) return `Vencedor R16 #${r16[1]}`;
+        // "Quarterfinal N Winner" → "Vencedor QF #N"
+        const qf = raw.match(/Quarterfinal (\d+) Winner/i);
+        if (qf) return `Vencedor QF #${qf[1]}`;
+        // "Semifinal N Winner/Loser" → "Vencedor/Perdedor SF #N"
+        const sf = raw.match(/Semifinal (\d+) (Winner|Loser)/i);
+        if (sf) return `${sf[2] === 'Winner' ? 'Vencedor' : 'Perdedor'} SF #${sf[1]}`;
         return raw;
       };
       const homeLabel = homeTbd ? fmtLabel(homeDisplay) : null;
@@ -132,7 +143,7 @@ export async function importKnockoutMatches() {
 
       // Verifica se já existe pelo espn_event_id
       const [[existing]] = await pool.query(
-        'SELECT id, home_team_id, away_team_id, kick_off_utc, venue FROM matches WHERE espn_event_id = ?',
+        'SELECT id, home_team_id, away_team_id, kick_off_utc, venue, home_placeholder, away_placeholder FROM matches WHERE espn_event_id = ?',
         [espnId]
       );
 
@@ -155,7 +166,8 @@ export async function importKnockoutMatches() {
         const needsUpdate =
           (teamsConfirmed && (existing.home_team_id !== homeId || existing.away_team_id !== awayId)) ||
           existing.kick_off_utc?.toISOString?.().slice(0,19).replace('T',' ') !== kickoffUtc ||
-          (venue && !existing.venue);
+          (venue && !existing.venue) ||
+          (!teamsConfirmed && (existing.home_placeholder !== homeLabel || existing.away_placeholder !== awayLabel));
 
         if (needsUpdate) {
           await pool.query(

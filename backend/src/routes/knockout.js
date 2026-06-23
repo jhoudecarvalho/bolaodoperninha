@@ -26,7 +26,7 @@ async function buildFromDB(playerId) {
 
   const [rows] = await pool.query(
     `SELECT
-       m.id, m.fd_match_id, m.stage, m.kick_off_utc,
+       m.id, m.fd_match_id, m.stage, m.kick_off_utc, m.venue,
        m.status, m.home_score, m.away_score, m.winner,
        m.live_minute, m.live_injury_time,
        m.home_scorers, m.away_scorers,
@@ -61,6 +61,7 @@ async function buildFromDB(playerId) {
       id:          r.fd_match_id ?? r.id,
       dbMatchId:   r.id,
       utcDate:     r.kick_off_utc,
+      venue:       r.venue ?? null,
       status:      r.status,
       locked:      Boolean(Number(r.locked)),
       home:        r.home_name ? { name: r.home_name, flag: r.home_flag } : null,

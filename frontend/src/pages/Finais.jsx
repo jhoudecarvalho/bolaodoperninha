@@ -109,11 +109,16 @@ function PredictCard({ match, playerId, stageKey, onSaved }) {
         <span className="text-[10px] font-semibold" style={{ color: accent }}>
           {STAGE_LABEL[stageKey] ?? stageKey}
         </span>
-        {match.utcDate && (
-          <span className="text-[10px] text-ink-dim ml-auto">
-            {fmtDate(match.utcDate)} · {fmtTime(match.utcDate)}
-          </span>
-        )}
+        <div className="ml-auto text-right">
+          {match.utcDate && (
+            <div className="text-[10px] text-ink-dim">
+              {fmtDate(match.utcDate)} · {fmtTime(match.utcDate)}
+            </div>
+          )}
+          {match.venue && (
+            <div className="text-[9px] text-ink-dim/60">📍 {match.venue}</div>
+          )}
+        </div>
       </div>
 
       {/* Times + placar oficial */}
@@ -373,18 +378,27 @@ function PhaseCard({ match, slotH }) {
           </div>
         )}
         <div className={`flex items-center gap-1.5 px-2 py-1 ${isFinished && awayWon ? 'opacity-40' : ''}`}>
-          <span className="text-sm leading-none shrink-0">{match.home?.flag ?? '🏳️'}</span>
-          <span className={`text-[11px] font-semibold truncate flex-1 ${homeWon ? 'text-gold' : 'text-ink'}`}>{shortFull(match.home?.name)}</span>
-          {hasScore && <span className={`text-sm font-bold tabular-nums ${homeWon ? 'text-gold' : 'text-ink-mut'}`}>{match.homeScore}</span>}
+          {match.home
+            ? <><span className="text-sm leading-none shrink-0">{match.home.flag}</span>
+                <span className={`text-[11px] font-semibold truncate flex-1 ${homeWon ? 'text-gold' : 'text-ink'}`}>{shortFull(match.home.name)}</span>
+                {hasScore && <span className={`text-sm font-bold tabular-nums ${homeWon ? 'text-gold' : 'text-ink-mut'}`}>{match.homeScore}</span>}</>
+            : <span className="text-[9px] text-ink-dim italic truncate flex-1">{match.homeLabel ?? 'A definir'}</span>
+          }
         </div>
         <div style={{ borderTop: '1px solid rgba(30,30,55,0.8)', margin: '0 6px' }} />
         <div className={`flex items-center gap-1.5 px-2 py-1 ${isFinished && homeWon ? 'opacity-40' : ''}`}>
-          <span className="text-sm leading-none shrink-0">{match.away?.flag ?? '🏳️'}</span>
-          <span className={`text-[11px] font-semibold truncate flex-1 ${awayWon ? 'text-gold' : 'text-ink'}`}>{shortFull(match.away?.name)}</span>
-          {hasScore && <span className={`text-sm font-bold tabular-nums ${awayWon ? 'text-gold' : 'text-ink-mut'}`}>{match.awayScore}</span>}
+          {match.away
+            ? <><span className="text-sm leading-none shrink-0">{match.away.flag}</span>
+                <span className={`text-[11px] font-semibold truncate flex-1 ${awayWon ? 'text-gold' : 'text-ink'}`}>{shortFull(match.away.name)}</span>
+                {hasScore && <span className={`text-sm font-bold tabular-nums ${awayWon ? 'text-gold' : 'text-ink-mut'}`}>{match.awayScore}</span>}</>
+            : <span className="text-[9px] text-ink-dim italic truncate flex-1">{match.awayLabel ?? 'A definir'}</span>
+          }
         </div>
         {!isLive && fmtDate(match.utcDate) && (
-          <div className="text-center text-[9px] text-ink-dim pb-0.5">{fmtDate(match.utcDate)}</div>
+          <div className="text-center text-[9px] text-ink-dim pb-0.5 leading-tight">
+            {fmtDate(match.utcDate)}
+            {match.venue && <div className="text-[8px] opacity-50 truncate px-1">📍 {match.venue}</div>}
+          </div>
         )}
       </div>
     </div>
@@ -392,12 +406,13 @@ function PhaseCard({ match, slotH }) {
 }
 
 function FinalCard({ match }) {
-  const isLive    = match?.status === 'IN_PLAY' || match?.status === 'PAUSED';
+  const isLive     = match?.status === 'IN_PLAY' || match?.status === 'PAUSED';
   const isFinished = match?.status === 'FINISHED';
-  const homeWon   = match?.winner === 'HOME_TEAM';
-  const awayWon   = match?.winner === 'AWAY_TEAM';
-  const hasScore  = match?.homeScore != null;
-  const slotH     = MH * 2;
+  const homeWon    = match?.winner === 'HOME_TEAM';
+  const awayWon    = match?.winner === 'AWAY_TEAM';
+  const hasScore   = match?.homeScore != null;
+  const isPreview  = match && !match.home && !match.away;
+  const slotH      = MH * 2;
 
   if (!match) {
     return (
@@ -411,9 +426,12 @@ function FinalCard({ match }) {
     );
   }
 
+  const borderColor = isPreview ? 'rgba(200,170,110,0.2)' : 'rgba(200,170,110,0.7)';
+  const bgColor     = isPreview ? 'rgba(200,170,110,0.03)' : 'rgba(200,170,110,0.08)';
+
   return (
     <div style={{ height: slotH, display: 'flex', alignItems: 'center' }}>
-      <div style={{ border: '1px solid rgba(200,170,110,0.7)', background: 'rgba(200,170,110,0.08)', borderRadius: 5, margin: '0 2px', width: '100%', overflow: 'hidden' }}>
+      <div style={{ border: `1px solid ${borderColor}`, background: bgColor, borderRadius: 5, margin: '0 2px', width: '100%', overflow: 'hidden' }}>
         {isLive && (
           <div className="flex items-center justify-center gap-1 py-0.5" style={{ background: 'rgba(239,68,68,0.15)' }}>
             <span className="h-1.5 w-1.5 rounded-full bg-red-400 animate-pulse" />
@@ -421,18 +439,27 @@ function FinalCard({ match }) {
           </div>
         )}
         <div className={`flex items-center gap-1.5 px-2 py-1 ${isFinished && awayWon ? 'opacity-40' : ''}`}>
-          <span className="text-sm leading-none">{match.home?.flag ?? '🏳️'}</span>
-          <span className={`text-[11px] font-semibold truncate flex-1 ${homeWon ? 'text-gold' : 'text-ink'}`}>{shortFull(match.home?.name)}</span>
-          {hasScore && <span className={`text-sm font-bold tabular-nums text-gold`}>{match.homeScore}</span>}
+          {match.home
+            ? <><span className="text-sm leading-none">{match.home.flag}</span>
+                <span className={`text-[11px] font-semibold truncate flex-1 ${homeWon ? 'text-gold' : 'text-ink'}`}>{shortFull(match.home.name)}</span>
+                {hasScore && <span className="text-sm font-bold tabular-nums text-gold">{match.homeScore}</span>}</>
+            : <span className="text-[9px] text-ink-dim italic truncate flex-1">{match.homeLabel ?? 'A definir'}</span>
+          }
         </div>
-        <div style={{ borderTop: '1px solid rgba(200,170,110,0.25)', margin: '0 6px' }} />
+        <div style={{ borderTop: `1px solid ${isPreview ? 'rgba(200,170,110,0.1)' : 'rgba(200,170,110,0.25)'}`, margin: '0 6px' }} />
         <div className={`flex items-center gap-1.5 px-2 py-1 ${isFinished && homeWon ? 'opacity-40' : ''}`}>
-          <span className="text-sm leading-none">{match.away?.flag ?? '🏳️'}</span>
-          <span className={`text-[11px] font-semibold truncate flex-1 ${awayWon ? 'text-gold' : 'text-ink'}`}>{shortFull(match.away?.name)}</span>
-          {hasScore && <span className={`text-sm font-bold tabular-nums text-gold`}>{match.awayScore}</span>}
+          {match.away
+            ? <><span className="text-sm leading-none">{match.away.flag}</span>
+                <span className={`text-[11px] font-semibold truncate flex-1 ${awayWon ? 'text-gold' : 'text-ink'}`}>{shortFull(match.away.name)}</span>
+                {hasScore && <span className="text-sm font-bold tabular-nums text-gold">{match.awayScore}</span>}</>
+            : <span className="text-[9px] text-ink-dim italic truncate flex-1">{match.awayLabel ?? 'A definir'}</span>
+          }
         </div>
         {!isLive && fmtDate(match.utcDate) && (
-          <div className="text-center text-[9px] text-gold/70 pb-0.5">{fmtDate(match.utcDate)}</div>
+          <div className={`text-center text-[9px] pb-0.5 leading-tight ${isPreview ? 'text-ink-dim' : 'text-gold/70'}`}>
+            {fmtDate(match.utcDate)}
+            {match.venue && <div className="text-[8px] opacity-50 truncate px-1">📍 {match.venue}</div>}
+          </div>
         )}
       </div>
     </div>
@@ -584,7 +611,7 @@ export default function Finais() {
 
         {isProj && (
           <p className="text-center text-[11px] mb-3" style={{ color: '#a5b4fc' }}>
-            📊 Rodada de 32 projetada com a classificação atual dos grupos · Times oficiais entram automaticamente após os grupos terminarem
+            📊 Prévia não oficial baseada na classificação atual · Times e chaveamento confirmam automaticamente ao final dos grupos
           </p>
         )}
 

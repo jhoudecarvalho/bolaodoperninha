@@ -169,11 +169,29 @@ SELECT
   SUM(CASE
     WHEN pr.home_score = m.home_score AND pr.away_score = m.away_score
          AND m.home_score IS NOT NULL
-    THEN 3
+    THEN CASE m.stage
+      WHEN 'GROUP_STAGE'    THEN 3
+      WHEN 'LAST_32'        THEN 5
+      WHEN 'LAST_16'        THEN 8
+      WHEN 'QUARTER_FINALS' THEN 10
+      WHEN 'SEMI_FINALS'    THEN 13
+      WHEN 'THIRD_PLACE'    THEN 10
+      WHEN 'FINAL'          THEN 16
+      ELSE 3
+    END
     WHEN m.home_score IS NOT NULL AND
          SIGN(pr.home_score - pr.away_score) = SIGN(m.home_score - m.away_score) AND
          NOT (pr.home_score = m.home_score AND pr.away_score = m.away_score)
-    THEN 1
+    THEN CASE m.stage
+      WHEN 'GROUP_STAGE'    THEN 1
+      WHEN 'LAST_32'        THEN 3
+      WHEN 'LAST_16'        THEN 5
+      WHEN 'QUARTER_FINALS' THEN 6
+      WHEN 'SEMI_FINALS'    THEN 8
+      WHEN 'THIRD_PLACE'    THEN 6
+      WHEN 'FINAL'          THEN 10
+      ELSE 1
+    END
     ELSE 0
   END) AS pontos,
   SUM(CASE

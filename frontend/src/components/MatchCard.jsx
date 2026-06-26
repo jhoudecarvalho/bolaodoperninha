@@ -16,6 +16,16 @@ const STAGE_LABELS = {
   FINAL:          () => 'Final',
 };
 
+const STAGE_PTS = {
+  GROUP_STAGE:    { exact: 3,  outcome: 1 },
+  LAST_32:        { exact: 5,  outcome: 3 },
+  LAST_16:        { exact: 8,  outcome: 5 },
+  QUARTER_FINALS: { exact: 10, outcome: 6 },
+  SEMI_FINALS:    { exact: 13, outcome: 8 },
+  THIRD_PLACE:    { exact: 10, outcome: 6 },
+  FINAL:          { exact: 16, outcome: 10 },
+};
+
 function stageLabel(stage) {
   const fn = STAGE_LABELS[stage] ?? STAGE_LABELS.GROUP_STAGE;
   return fn();
@@ -162,6 +172,9 @@ export default function MatchCard({
     ? 'border-gold/50'
     : 'border-line';
 
+  const sp = STAGE_PTS[match.stage] ?? null;
+  const isKnockout = match.stage && match.stage !== 'GROUP_STAGE';
+
   return (
     <div className={`card ${borderClass} p-4 animate-slideUp`}>
       <div className="mb-2 flex items-center justify-between text-xs text-ink-mut">
@@ -181,6 +194,17 @@ export default function MatchCard({
           <StatusBadge match={match} />
         </div>
       </div>
+
+      {isKnockout && sp && (
+        <div className="mb-3 flex items-center gap-2 text-xs">
+          <span className="px-2 py-0.5 rounded-full font-semibold bg-gold/15 text-gold">
+            🎯 Placar exato: {sp.exact} pts
+          </span>
+          <span className="px-2 py-0.5 rounded-full font-semibold bg-yellow-400/10 text-yellow-400">
+            ⚽ Vencedor: {sp.outcome} pts
+          </span>
+        </div>
+      )}
 
       <div className="flex items-center justify-between gap-2">
         <div className="flex flex-1 items-center gap-2">
@@ -294,7 +318,8 @@ export default function MatchCard({
                   const correctOutcome =
                     revealed && hasResult && !exact &&
                     outcome(p.home_score, p.away_score) === outcome(match.home_score, match.away_score);
-                  const pts = revealed && hasResult ? (exact ? 3 : correctOutcome ? 1 : 0) : null;
+                  const sp  = STAGE_PTS[match.stage] ?? STAGE_PTS.GROUP_STAGE;
+                  const pts = revealed && hasResult ? (exact ? sp.exact : correctOutcome ? sp.outcome : 0) : null;
                   return (
                     <span
                       key={p.id}

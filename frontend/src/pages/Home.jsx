@@ -8,12 +8,12 @@ import RankingTable from '../components/RankingTable.jsx';
 import { useSSE } from '../hooks/useSSE.js';
 
 const MENU = [
-  { to: '/jogadores', label: '👥 Participantes', desc: 'Gerenciar (admin)' },
-  { to: '/palpites', label: '🎯 Palpites', desc: 'Por grupo' },
-  { to: '/resultados', label: '📊 Resultados', desc: 'API + manual' },
-  { to: '/ranking', label: '🏆 Ranking', desc: 'Tempo real' },
-  { to: '/classificacao', label: '🗂️ Classificação', desc: 'Grupos + artilheiros' },
-  { to: '/detalhes', label: '🔍 Detalhes', desc: 'Por jogador' },
+  { to: '/palpites',      label: '🎯 Palpites',      desc: 'Fase de grupos' },
+  { to: '/finais',        label: '⚔️ Mata-Mata',      desc: 'Palpites + chaveamento' },
+  { to: '/ranking',       label: '🏆 Ranking',        desc: 'Tempo real' },
+  { to: '/classificacao', label: '🗂️ Classificação',  desc: 'Grupos + artilheiros' },
+  { to: '/detalhes',      label: '🔍 Detalhes',       desc: 'Por jogador' },
+  { to: '/jogadores',     label: '👥 Participantes',  desc: 'Gerenciar (admin)' },
 ];
 
 export default function Home() {
@@ -92,17 +92,38 @@ export default function Home() {
         <h1 className="font-display text-3xl font-black text-gold sm:text-4xl">
           Bolão Grupo Perninha: Copa do Mundo 2026
         </h1>
-        <p className="mt-2 text-ink-mut">
-          Palpite nos 72 jogos da fase de grupos.{' '}
-          <b className="text-gold">Placar exato vale 3 pontos</b> •{' '}
-          <b className="text-yellow-400">Acertar o vencedor vale 1 ponto</b>
-        </p>
-        <div className="mt-4 flex flex-wrap justify-center gap-3 text-sm text-ink-mut">
-          <span className="badge bg-bg-900">🎯 3 pts — placar exato</span>
-          <span className="badge bg-bg-900">⚽ 1 pt — acertou o vencedor</span>
-          <span className="badge bg-bg-900">🔒 Bloqueio no apito inicial</span>
-          <span className="badge bg-bg-900">📡 Placares automáticos via API</span>
-        </div>
+        {upcoming.some(m => m.stage !== 'GROUP_STAGE') ? (
+          <>
+            <p className="mt-2 text-ink-mut">
+              <b className="text-gold">Mata-mata!</b>{' '}
+              Pontuação progressiva — quanto mais longe, mais pontos valem.
+            </p>
+            <div className="mt-4 flex flex-wrap justify-center gap-3 text-sm text-ink-mut">
+              <span className="badge bg-bg-900">⚔️ 16 avos — 🎯 5 pts / ⚽ 3 pts</span>
+              <span className="badge bg-bg-900">🔥 Oitavas — 🎯 8 pts / ⚽ 5 pts</span>
+              <span className="badge bg-bg-900">💥 Quartas — 🎯 10 pts / ⚽ 6 pts</span>
+              <span className="badge bg-bg-900">⚡ Semi — 🎯 13 pts / ⚽ 8 pts</span>
+              <span className="badge bg-bg-900">🏆 Final — 🎯 16 pts / ⚽ 10 pts</span>
+              <span className="badge bg-bg-900">🔒 Bloqueio no apito inicial</span>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="mt-2 text-ink-mut">
+              Palpite nos 72 jogos da fase de grupos e no mata-mata.{' '}
+              <b className="text-gold">Pontuação cresce a cada fase</b> —{' '}
+              placar exato vale mais quanto mais longe.
+            </p>
+            <div className="mt-4 flex flex-wrap justify-center gap-3 text-sm text-ink-mut">
+              <span className="badge bg-bg-900">🎯 3 pts — placar exato</span>
+              <span className="badge bg-bg-900">⚽ 1 pt — vencedor</span>
+              <span className="badge bg-bg-900">📈 Mais pontos no mata-mata</span>
+              <span className="badge bg-bg-900">🏆 +10 pts — acertar o campeão</span>
+              <span className="badge bg-bg-900">🔒 Bloqueio no apito inicial</span>
+              <span className="badge bg-bg-900">📡 Placares automáticos via API</span>
+            </div>
+          </>
+        )}
       </section>
 
       {/* Menu */}
@@ -134,19 +155,34 @@ export default function Home() {
             </p>
           )}
           <div className="space-y-3">
-            {upcoming.map((m) => (
-              <MatchCard
-                key={m.id}
-                match={m}
-                playerId={!isAdmin ? user?.player_id : null}
-                playerName={!isAdmin ? user?.name : ''}
-                showPredictions
-                showQuickPredict={!isAdmin && !!user?.player_id}
-                matchPredictions={predsByMatch[m.id]}
-                myPrediction={myPredsByMatch[m.id]}
-                onSaved={load}
-              />
-            ))}
+            {upcoming.map((m, i) => {
+              const prev = upcoming[i - 1];
+              const isKnockout = m.stage !== 'GROUP_STAGE';
+              const firstKnockout = isKnockout && (!prev || prev.stage === 'GROUP_STAGE');
+              return (
+                <div key={m.id}>
+                  {firstKnockout && (
+                    <div className="flex items-center gap-3 py-1">
+                      <div className="h-px flex-1 bg-gold/30" />
+                      <span className="text-xs font-bold px-3 py-1 rounded-full bg-gold/10 text-gold border border-gold/30">
+                        ⚔️ Mata-Mata
+                      </span>
+                      <div className="h-px flex-1 bg-gold/30" />
+                    </div>
+                  )}
+                  <MatchCard
+                    match={m}
+                    playerId={!isAdmin ? user?.player_id : null}
+                    playerName={!isAdmin ? user?.name : ''}
+                    showPredictions
+                    showQuickPredict={!isAdmin && !!user?.player_id}
+                    matchPredictions={predsByMatch[m.id]}
+                    myPrediction={myPredsByMatch[m.id]}
+                    onSaved={load}
+                  />
+                </div>
+              );
+            })}
             {!upcoming.length && <p className="text-ink-mut">Sem jogos futuros.</p>}
           </div>
         </section>

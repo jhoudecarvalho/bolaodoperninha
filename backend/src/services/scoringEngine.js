@@ -1,14 +1,23 @@
 /**
  * Sistema de pontuação do bolão.
  *
- * Regras:
- *   - Placar exato  → 3 pontos
- *   - Vencedor certo (sem placar exato) → 1 ponto
- *   - Qualquer outro → 0 pontos
+ * Fase de grupos: placar exato = 3 pts, vencedor certo = 1 pt
+ * Mata-mata: pontuação progressiva por fase (ver STAGE_POINTS)
  */
 
-export const POINTS_EXACT = 3;
-export const POINTS_OUTCOME = 1;
+export const STAGE_POINTS = {
+  GROUP_STAGE:    { exact: 3,  outcome: 1 },
+  LAST_32:        { exact: 5,  outcome: 3 },
+  LAST_16:        { exact: 8,  outcome: 5 },
+  QUARTER_FINALS: { exact: 10, outcome: 6 },
+  SEMI_FINALS:    { exact: 13, outcome: 8 },
+  THIRD_PLACE:    { exact: 10, outcome: 6 },
+  FINAL:          { exact: 16, outcome: 10 },
+};
+
+export function getStagePoints(stage) {
+  return STAGE_POINTS[stage] ?? STAGE_POINTS.GROUP_STAGE;
+}
 
 function outcome(home, away) {
   if (home > away) return 'home';
@@ -35,8 +44,10 @@ export function scorePrediction(prediction, match) {
     outcome(prediction.home_score, prediction.away_score) ===
       outcome(match.home_score, match.away_score);
 
+  const { exact: pe, outcome: po } = getStagePoints(match.stage);
+
   return {
-    points: exact ? POINTS_EXACT : correctOutcome ? POINTS_OUTCOME : 0,
+    points: exact ? pe : correctOutcome ? po : 0,
     exact,
     correctOutcome,
     hasResult: true,

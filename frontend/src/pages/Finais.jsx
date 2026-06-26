@@ -49,9 +49,17 @@ const STAGE_COLOR = {
   THIRD_PLACE:    '#64748b',
   FINAL:          '#c8aa6e',
 };
+const STAGE_PTS = {
+  LAST_32:        { exact: 5,  outcome: 3 },
+  LAST_16:        { exact: 8,  outcome: 5 },
+  QUARTER_FINALS: { exact: 10, outcome: 6 },
+  SEMI_FINALS:    { exact: 13, outcome: 8 },
+  THIRD_PLACE:    { exact: 10, outcome: 6 },
+  FINAL:          { exact: 16, outcome: 10 },
+};
 
 // ─── Card de palpite da lista ─────────────────────────────────────────────────
-function PredictCard({ match, playerId, stageKey, onSaved }) {
+function PredictCard({ match, playerId, stageKey, matchPredictions, onSaved }) {
   const existing = match.myPrediction;
   const [h, setH]         = useState(existing != null ? String(existing.home) : '');
   const [a, setA]         = useState(existing != null ? String(existing.away) : '');
@@ -241,12 +249,56 @@ function PredictCard({ match, playerId, stageKey, onSaved }) {
           <p className="text-center text-xs text-ink-dim">Faça login para dar seu palpite</p>
         )}
       </div>
+
+      {/* Lista de quem já apostou */}
+      {matchPredictions != null && match.home && match.away && (
+        <div className="px-4 pb-3 pt-2" style={{ borderTop: `1px solid ${accent}15` }}>
+          {matchPredictions.length === 0 ? (
+            <p className="text-xs text-ink-dim">Nenhum palpite ainda.</p>
+          ) : (
+            <>
+              <p className="mb-1.5 flex items-center justify-between text-xs text-ink-dim">
+                <span>Palpites ({matchPredictions.length})</span>
+                {!locked && <span className="opacity-60">🔒 placares revelados no início</span>}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {matchPredictions.map((p) => {
+                  const revealed = p.revealed !== false && p.home_score != null;
+                  const o = (h, a) => h > a ? 'home' : h < a ? 'away' : 'draw';
+                  const sp = STAGE_PTS[stageKey] ?? { exact: 3, outcome: 1 };
+                  const exact = revealed && hasScore && p.home_score === match.homeScore && p.away_score === match.awayScore;
+                  const correctOutcome = revealed && hasScore && !exact && o(p.home_score, p.away_score) === o(match.homeScore, match.awayScore);
+                  const pts = revealed && hasScore ? (exact ? sp.exact : correctOutcome ? sp.outcome : 0) : null;
+                  return (
+                    <span
+                      key={p.id}
+                      className={`badge bg-bg-900 ${exact ? 'text-ok ring-1 ring-ok/40' : 'text-ink'}`}
+                      title={p.player_name}
+                    >
+                      <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: p.avatar_color || accent }} />
+                      {p.player_name}
+                      {revealed
+                        ? <b className="tabular-nums">{p.home_score}×{p.away_score}</b>
+                        : <span className="text-ok">✔</span>}
+                      {pts !== null && (
+                        <span className={exact ? 'font-bold text-gold' : correctOutcome ? 'font-bold text-yellow-400' : 'text-ink-dim'}>
+                          {pts > 0 ? `+${pts}` : '0'}
+                        </span>
+                      )}
+                    </span>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
 // ─── Lista de palpites por fase ───────────────────────────────────────────────
-function PredictList({ stages, projection, playerId, onSaved }) {
+function PredictList({ stages, projection, playerId, predsByMatch, onSaved }) {
   // Mescla projeção nos jogos da R32 que ainda têm times null
   const projMatches = projection?.matches ?? [];
 
@@ -261,31 +313,60 @@ function PredictList({ stages, projection, playerId, onSaved }) {
     return { key: s.key, matches };
   }).filter(s => s.matches.length > 0);
 
+  const totalMatches = byStage.reduce((acc, s) => acc + s.matches.length, 0);
+  const totalBets    = byStage.reduce((acc, s) => acc + s.matches.filter(m => m.myPrediction != null).length, 0);
+
   return (
     <div className="space-y-6">
-      {byStage.map(({ key, matches }) => (
-        <div key={key}>
-          <div className="flex items-center gap-2 mb-3">
-            <div className="h-px flex-1" style={{ background: `${STAGE_COLOR[key] ?? '#555'}40` }} />
-            <span className="text-xs font-bold px-2 py-0.5 rounded-full"
-              style={{ background: `${STAGE_COLOR[key] ?? '#555'}20`, color: STAGE_COLOR[key] ?? '#aaa' }}>
-              {STAGE_LABEL[key] ?? key}
-            </span>
-            <div className="h-px flex-1" style={{ background: `${STAGE_COLOR[key] ?? '#555'}40` }} />
-          </div>
-          <div className="space-y-3">
-            {matches.map((m, i) => (
-              <PredictCard
-                key={m.id ?? i}
-                match={m}
-                playerId={playerId}
-                stageKey={key}
-                onSaved={onSaved}
-              />
-            ))}
-          </div>
+      {playerId && totalMatches > 0 && (
+        <div className="text-center text-xs text-ink-dim">
+          <span className={totalBets === totalMatches ? 'text-ok font-semibold' : ''}>
+            {totalBets === totalMatches
+              ? `✓ Todas as apostas feitas (${totalBets}/${totalMatches})`
+              : `${totalBets} de ${totalMatches} apostas feitas`}
+          </span>
         </div>
-      ))}
+      )}
+      {byStage.map(({ key, matches }) => {
+        const stageBets = matches.filter(m => m.myPrediction != null).length;
+        const allBet    = stageBets === matches.length;
+        const accent    = STAGE_COLOR[key] ?? '#555';
+        return (
+          <div key={key}>
+            <div className="flex items-center gap-2 mb-3">
+              <div className="h-px flex-1" style={{ background: `${accent}40` }} />
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                  style={{ background: `${accent}20`, color: accent }}>
+                  {STAGE_LABEL[key] ?? key}
+                </span>
+                {playerId && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold"
+                    style={{
+                      background: allBet ? 'rgba(34,197,94,0.15)' : `${accent}15`,
+                      color: allBet ? '#4ade80' : `${accent}cc`,
+                    }}>
+                    {allBet ? `✓ ${stageBets}/${matches.length}` : `${stageBets}/${matches.length}`}
+                  </span>
+                )}
+              </div>
+              <div className="h-px flex-1" style={{ background: `${accent}40` }} />
+            </div>
+            <div className="space-y-3">
+              {matches.map((m, i) => (
+                <PredictCard
+                  key={m.id ?? i}
+                  match={m}
+                  playerId={playerId}
+                  stageKey={key}
+                  matchPredictions={predsByMatch?.[m.dbMatchId]}
+                  onSaved={onSaved}
+                />
+              ))}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -508,6 +589,7 @@ export default function Finais() {
   const playerId                    = user?.player_id ?? null;
   const [data, setData]             = useState(null);
   const [projection, setProjection] = useState(null);
+  const [predsByMatch, setPredsByMatch] = useState({});
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState(null);
   const scrollRef                   = useRef(null);
@@ -518,9 +600,18 @@ export default function Finais() {
       const [d, proj] = await Promise.all([KnockoutAPI.get(), KnockoutAPI.projection()]);
       setData(d);
       const r32 = (d.stages ?? []).find(s => s.key === 'LAST_32')?.matches ?? [];
-      // Mostra projeção enquanto não há times confirmados na R32
       setProjection(r32.some(m => m.home || m.away) ? null : proj);
       setError(null);
+      const ids = (d.stages ?? []).flatMap(s => s.matches.map(m => m.dbMatchId)).filter(Boolean);
+      if (ids.length) {
+        const all = await PredictionsAPI.byMatches(ids).catch(() => []);
+        const map = {};
+        for (const p of all) {
+          if (!map[p.match_id]) map[p.match_id] = [];
+          map[p.match_id].push(p);
+        }
+        setPredsByMatch(map);
+      }
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   }
@@ -531,6 +622,16 @@ export default function Finais() {
       setData(d);
       const r32 = (d.stages ?? []).find(s => s.key === 'LAST_32')?.matches ?? [];
       setProjection(r32.some(m => m.home || m.away) ? null : proj);
+      const ids = (d.stages ?? []).flatMap(s => s.matches.map(m => m.dbMatchId)).filter(Boolean);
+      if (ids.length) {
+        const all = await PredictionsAPI.byMatches(ids).catch(() => []);
+        const map = {};
+        for (const p of all) {
+          if (!map[p.match_id]) map[p.match_id] = [];
+          map[p.match_id].push(p);
+        }
+        setPredsByMatch(map);
+      }
     } catch {}
   }, []);
 
@@ -596,7 +697,7 @@ export default function Finais() {
           <span className="text-sm font-bold text-ink">🎯 Seus Palpites</span>
           <div className="h-px flex-1 bg-line" />
         </div>
-        <PredictList stages={stages} projection={projection} playerId={playerId} onSaved={reloadSilent} />
+        <PredictList stages={stages} projection={projection} playerId={playerId} predsByMatch={predsByMatch} onSaved={reloadSilent} />
       </section>
 
       {/* ══════════════════════════════════════════════════════════════════

@@ -24,6 +24,13 @@ function shortFull(name) {
   if (name.length <= 13) return name;
   return name.slice(0, 12) + '…';
 }
+// Extrai números de posição ESPN de um texto de placeholder (ex: "Vencedor R32 #3" → [3])
+function parseBracketNums(label, prefix) {
+  if (!label) return [];
+  const regex = new RegExp(`${prefix}\\s*#(\\d+)`, 'gi');
+  return [...label.matchAll(regex)].map(m => Number(m[1]));
+}
+
 function fmtDate(utc) {
   if (!utc) return null;
   return new Date(utc).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' });
@@ -666,14 +673,53 @@ export default function Finais() {
   const rawR32         = hasOfficialR32 ? officialR32 : (projection?.matches ?? []);
   const isProj         = !hasOfficialR32 && !!projection;
 
-  const r32L = fill(rawR32.slice(0, 8), 8);
-  const r32R = fill(rawR32.slice(8),    8);
-  const r16L = fill(getMs('LAST_16').slice(0, 4), 4);
-  const r16R = fill(getMs('LAST_16').slice(4),    4);
-  const qfL  = fill(getMs('QUARTER_FINALS').slice(0, 2), 2);
-  const qfR  = fill(getMs('QUARTER_FINALS').slice(2),    2);
-  const sfL  = fill(getMs('SEMI_FINALS').slice(0, 1), 1);
-  const sfR  = fill(getMs('SEMI_FINALS').slice(1),    1);
+  // Monta o bracket usando as posições ESPN dos placeholders para garantir
+  // que R16/R32 apareçam no lado correto (esquerdo vs. direito).
+  // Copa 2026: SF#1 = QF#1+QF#2, SF#2 = QF#3+QF#4 (QFs cruzam os lados da fase anterior).
+  const allR16 = getMs('LAST_16');
+  const allQF  = getMs('QUARTER_FINALS');
+  const allSF  = getMs('SEMI_FINALS');
+
+  const byEspnId = (a, b) => (a.espnId ?? 9999) - (b.espnId ?? 9999);
+  const r16ByPos = [...allR16].sort(byEspnId); // índice 0 = R16 ESPN #1
+  const r32ByPos = [...rawR32].sort(byEspnId); // índice 0 = R32 ESPN #1
+
+  // QF por data: [QF#1, QF#2, QF#3, QF#4]
+  // SF[0]=SF#1 usa QF#1+QF#2 → lado esquerdo; SF[1]=SF#2 usa QF#3+QF#4 → direito
+  const qfL = fill(allQF.slice(0, 2), 2);
+  const qfR = fill(allQF.slice(2),    2);
+  const sfL = fill(allSF.slice(0, 1), 1);
+  const sfR = fill(allSF.slice(1),    1);
+
+  // Monta R16L: pares de R16 usados pelos QFs do lado esquerdo (QF#1 e QF#2)
+  const r16LMatches = allQF.slice(0, 2).flatMap(qf => {
+    const nums = [...parseBracketNums(qf.homeLabel, 'R16'), ...parseBracketNums(qf.awayLabel, 'R16')]
+      .sort((a, b) => a - b);
+    return nums.length === 2 ? nums.map(n => r16ByPos[n - 1] ?? null) : [null, null];
+  });
+  const r16RMatches = allQF.slice(2).flatMap(qf => {
+    const nums = [...parseBracketNums(qf.homeLabel, 'R16'), ...parseBracketNums(qf.awayLabel, 'R16')]
+      .sort((a, b) => a - b);
+    return nums.length === 2 ? nums.map(n => r16ByPos[n - 1] ?? null) : [null, null];
+  });
+
+  // Fallback para data se os placeholders não tiverem a info de R16 #N
+  const r16L = fill(r16LMatches.some(Boolean) ? r16LMatches : allR16.slice(0, 4), 4);
+  const r16R = fill(r16RMatches.some(Boolean) ? r16RMatches : allR16.slice(4),    4);
+
+  // Monta R32L: para cada R16L, os dois R32 que o alimentam
+  const buildR32Side = (r16Side) => r16Side.flatMap(r16m => {
+    if (!r16m) return [null, null];
+    const nums = [...parseBracketNums(r16m.homeLabel, 'R32'), ...parseBracketNums(r16m.awayLabel, 'R32')]
+      .sort((a, b) => a - b);
+    return nums.length === 2 ? nums.map(n => r32ByPos[n - 1] ?? null) : [null, null];
+  });
+  const r32LMatches = buildR32Side(r16L);
+  const r32RMatches = buildR32Side(r16R);
+
+  const r32L = fill(r32LMatches.some(Boolean) ? r32LMatches : rawR32.slice(0, 8), 8);
+  const r32R = fill(r32RMatches.some(Boolean) ? r32RMatches : rawR32.slice(8),    8);
+
   const fin  = getMs('FINAL')[0] ?? null;
   const tp   = getMs('THIRD_PLACE')[0] ?? null;
 

@@ -74,8 +74,8 @@ async function buildFromDB(playerId) {
       winner:      mapWinner(r.winner),
       liveMinute:  r.live_minute,
       liveInjury:  r.live_injury_time,
-      homeScorers: r.home_scorers ? JSON.parse(r.home_scorers) : [],
-      awayScorers: r.away_scorers ? JSON.parse(r.away_scorers) : [],
+      homeScorers: r.home_scorers ?? [],
+      awayScorers: r.away_scorers ?? [],
       ...(pred ? { myPrediction: pred } : {}),
     });
   }

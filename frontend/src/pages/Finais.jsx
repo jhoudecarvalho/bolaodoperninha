@@ -708,11 +708,23 @@ export default function Finais() {
   const r16R = fill(r16RMatches.some(Boolean) ? r16RMatches : allR16.slice(4),    4);
 
   // Monta R32L: para cada R16L, os dois R32 que o alimentam
+  const findR32ByTeam = (team) =>
+    team ? r32ByPos.find(r => r?.home?.name === team.name || r?.away?.name === team.name) ?? null : null;
+
   const buildR32Side = (r16Side) => r16Side.flatMap(r16m => {
     if (!r16m) return [null, null];
-    const nums = [...parseBracketNums(r16m.homeLabel, 'R32'), ...parseBracketNums(r16m.awayLabel, 'R32')]
-      .sort((a, b) => a - b);
-    return nums.length === 2 ? nums.map(n => r32ByPos[n - 1] ?? null) : [null, null];
+    const homeNums = parseBracketNums(r16m.homeLabel, 'R32');
+    const awayNums = parseBracketNums(r16m.awayLabel, 'R32');
+    const nums = [...homeNums, ...awayNums].sort((a, b) => a - b);
+    if (nums.length === 2) return nums.map(n => r32ByPos[n - 1] ?? null);
+    // Um lado já tem time confirmado (placeholder apagado): busca o R32 pelo time
+    if (nums.length === 1) {
+      const knownR32 = r32ByPos[nums[0] - 1] ?? null;
+      if (homeNums.length === 0) return [findR32ByTeam(r16m.home), knownR32];
+      return [knownR32, findR32ByTeam(r16m.away)];
+    }
+    // Ambos os lados já têm times confirmados
+    return [findR32ByTeam(r16m.home), findR32ByTeam(r16m.away)];
   });
   const r32LMatches = buildR32Side(r16L);
   const r32RMatches = buildR32Side(r16R);

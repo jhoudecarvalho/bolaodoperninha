@@ -37,11 +37,11 @@ export default function Home() {
     ]);
     setLive(liveData);
 
-    // Calcula quando o último jogo "recentemente encerrado" vai sair da janela de 20 min
-    const TWENTY_MIN = 20 * 60 * 1000;
+    // Calcula quando o último jogo "recentemente encerrado" vai sair da janela (1h)
+    const RECENT_WINDOW_MS = 60 * 60 * 1000;
     const finishedWithTs = liveData.filter((m) => m.status === 'finished' && m.result_updated_at);
     if (finishedWithTs.length) {
-      const expiries = finishedWithTs.map((m) => new Date(m.result_updated_at).getTime() + TWENTY_MIN);
+      const expiries = finishedWithTs.map((m) => new Date(m.result_updated_at).getTime() + RECENT_WINDOW_MS);
       setRecentExpiry(Math.min(...expiries));
     } else {
       setRecentExpiry(null);

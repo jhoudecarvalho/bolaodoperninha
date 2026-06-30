@@ -39,10 +39,16 @@ export function scorePrediction(prediction, match) {
     prediction.home_score === match.home_score &&
     prediction.away_score === match.away_score;
 
+  // Mata-mata nos pênaltis: o placar fica empatado mas `winner` aponta quem
+  // avançou. Usa o avanço real; sem `winner` (grupos) cai no sinal do placar.
+  const actualOutcome =
+    match.winner === 'home' ? 'home' :
+    match.winner === 'away' ? 'away' :
+    outcome(match.home_score, match.away_score);
+
   const correctOutcome =
     !exact &&
-    outcome(prediction.home_score, prediction.away_score) ===
-      outcome(match.home_score, match.away_score);
+    outcome(prediction.home_score, prediction.away_score) === actualOutcome;
 
   const { exact: pe, outcome: po } = getStagePoints(match.stage);
 

@@ -26,7 +26,8 @@ async function buildFromDB(playerId) {
 
   const [rows] = await pool.query(
     `SELECT
-       m.id, m.fd_match_id, m.espn_event_id, m.stage, m.kick_off_utc, m.venue,
+       m.id, m.fd_match_id, m.espn_event_id, m.match_number, m.stage, m.kick_off_utc, m.venue,
+       m.attendance, m.home_stats, m.away_stats,
        m.status, m.home_score, m.away_score, m.winner,
        m.live_minute, m.live_injury_time,
        m.home_scorers, m.away_scorers,
@@ -61,6 +62,7 @@ async function buildFromDB(playerId) {
       id:          r.fd_match_id ?? r.id,
       dbMatchId:   r.id,
       espnId:      r.espn_event_id ?? null,
+      matchNumber: r.match_number ?? null,
       utcDate:     r.kick_off_utc,
       venue:       r.venue ?? null,
       status:      r.status,
@@ -74,6 +76,9 @@ async function buildFromDB(playerId) {
       winner:      mapWinner(r.winner),
       liveMinute:  r.live_minute,
       liveInjury:  r.live_injury_time,
+      attendance:  r.attendance ?? null,
+      homeStats:   r.home_stats ?? null,
+      awayStats:   r.away_stats ?? null,
       homeScorers: r.home_scorers ?? [],
       awayScorers: r.away_scorers ?? [],
       ...(pred ? { myPrediction: pred } : {}),

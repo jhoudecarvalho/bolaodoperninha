@@ -60,6 +60,25 @@ async function fetchJson(url) {
   return res.json();
 }
 
+// matchNumber = número oficial FIFA da partida (estático). Define a posição no
+// chaveamento: R32=73-88, R16=89-96, QF=97-100, SF=101-102, 3º=103, Final=104.
+// O scoreboard NÃO traz esse campo; só o core API. Como é imutável, buscamos
+// apenas uma vez por jogo (quando match_number ainda está nulo no banco).
+const CORE_API =
+  process.env.ESPN_CORE_API_URL ||
+  'https://sports.core.api.espn.com/v2/sports/soccer/leagues/fifa.world';
+
+async function fetchMatchNumber(espnId) {
+  try {
+    const data = await fetchJson(`${CORE_API}/events/${espnId}/competitions/${espnId}`);
+    const n = Number(data?.matchNumber);
+    return Number.isFinite(n) ? n : null;
+  } catch (err) {
+    console.warn(`⚠️  matchNumber ${espnId}:`, err.message);
+    return null;
+  }
+}
+
 export async function importKnockoutMatches() {
   // Carrega times do banco
   const [teams] = await pool.query('SELECT id, name_en FROM teams');
@@ -143,24 +162,32 @@ export async function importKnockoutMatches() {
 
       // Verifica se já existe pelo espn_event_id
       const [[existing]] = await pool.query(
-        'SELECT id, home_team_id, away_team_id, kick_off_utc, venue, home_placeholder, away_placeholder FROM matches WHERE espn_event_id = ?',
+        'SELECT id, home_team_id, away_team_id, kick_off_utc, venue, home_placeholder, away_placeholder, match_number FROM matches WHERE espn_event_id = ?',
         [espnId]
       );
 
       if (!existing) {
+        const matchNumber = await fetchMatchNumber(espnId);
         await pool.query(
           `INSERT INTO matches
-             (stage, espn_event_id, home_team_id, away_team_id,
+             (stage, espn_event_id, match_number, home_team_id, away_team_id,
               home_placeholder, away_placeholder,
               match_date, kick_off_utc, venue, status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled')`,
-          [stage, espnId, homeId, awayId, homeLabel, awayLabel, matchDate, kickoffUtc, venue]
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled')`,
+          [stage, espnId, matchNumber, homeId, awayId, homeLabel, awayLabel, matchDate, kickoffUtc, venue]
         );
         const desc = homeTbd ? `${homeLabel} × ${awayLabel}` : `${homeDisplay} × ${awayDisplay}`;
         console.log(`✅ Knockout inserido [${stage}]: ${desc} (${matchDate})`);
         broadcast('result', { stage });
         inserted++;
       } else {
+        // Backfill de match_number para jogos já existentes sem o campo
+        if (existing.match_number == null) {
+          const matchNumber = await fetchMatchNumber(espnId);
+          if (matchNumber != null) {
+            await pool.query('UPDATE matches SET match_number = ? WHERE id = ?', [matchNumber, existing.id]);
+          }
+        }
         // Times confirmados: atualiza IDs e limpa placeholders
         const teamsConfirmed = !homeTbd && !awayTbd && homeId && awayId;
         const needsUpdate =

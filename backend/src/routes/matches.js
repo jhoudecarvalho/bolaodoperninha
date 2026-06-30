@@ -21,7 +21,7 @@ router.post('/sync', async (req, res) => {
 const BASE_SELECT = `
   SELECT
     m.id, m.group_id, m.stage, m.match_date, m.kick_off_utc, m.venue, m.attendance, m.status,
-    m.home_score, m.away_score, m.result_source, m.result_updated_at,
+    m.home_score, m.away_score, m.winner, m.result_source, m.result_updated_at,
     m.live_minute, m.live_injury_time,
     m.home_scorers, m.away_scorers, m.home_stats, m.away_stats,
     m.home_team_id, m.away_team_id,
@@ -47,7 +47,8 @@ router.get('/', async (req, res) => {
     if (status === 'in_progress') {
       where.push(
         "(m.status IN ('live', 'paused')" +
-        " OR (m.status = 'finished' AND m.result_updated_at >= UTC_TIMESTAMP() - INTERVAL 20 MINUTE))"
+        // Janela de 1h: jogos recém-encerrados continuam no banner "ao vivo"
+        " OR (m.status = 'finished' AND m.result_updated_at >= UTC_TIMESTAMP() - INTERVAL 60 MINUTE))"
       );
     } else if (status) {
       where.push('m.status = ?');

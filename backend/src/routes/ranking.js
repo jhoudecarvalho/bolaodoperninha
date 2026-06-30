@@ -84,7 +84,10 @@ router.get('/:player_id/detail', async (req, res) => {
                WHEN 'FINAL'          THEN 16
                ELSE 3
              END
-           WHEN SIGN(pr.home_score - pr.away_score) = SIGN(m.home_score - m.away_score) THEN
+           WHEN SIGN(pr.home_score - pr.away_score) =
+                (CASE WHEN m.winner = 'home' THEN 1
+                      WHEN m.winner = 'away' THEN -1
+                      ELSE SIGN(m.home_score - m.away_score) END) THEN
              CASE m.stage
                WHEN 'GROUP_STAGE'    THEN 1
                WHEN 'LAST_32'        THEN 3

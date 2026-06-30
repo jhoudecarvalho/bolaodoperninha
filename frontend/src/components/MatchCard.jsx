@@ -98,6 +98,12 @@ export default function MatchCard({
   const hasResult = match.home_score != null && match.away_score != null;
   const today = isToday(match.kick_off_utc);
 
+  // Decisão por pênaltis: placar empatado mas há vencedor (mata-mata)
+  const penaltyWinner =
+    hasResult && match.home_score === match.away_score
+      ? (match.winner === 'home' ? match.home_name : match.winner === 'away' ? match.away_name : null)
+      : null;
+
   // Sincroniza quando o pai atualiza matchPredictions (ex: após salvar)
   useEffect(() => {
     if (matchPredictions !== undefined) setPredictions(matchPredictions);
@@ -228,6 +234,14 @@ export default function MatchCard({
         </div>
       </div>
 
+      {penaltyWinner && (
+        <div className="mt-2 text-center">
+          <span className="inline-flex items-center gap-1 rounded-full bg-gold/15 px-2 py-0.5 text-xs font-semibold text-gold">
+            🥅 {penaltyWinner} venceu nos pênaltis
+          </span>
+        </div>
+      )}
+
       {hasResult && (() => {
         const hs = parseScorers(match.home_scorers);
         const as = parseScorers(match.away_scorers);
@@ -310,6 +324,11 @@ export default function MatchCard({
                 {predictions.map((p) => {
                   const revealed = p.revealed !== false && p.home_score != null;
                   const outcome = (h, a) => h > a ? 'home' : h < a ? 'away' : 'draw';
+                  // Pênaltis: placar empatado mas alguém avançou → usa o `winner`
+                  const actual =
+                    match.winner === 'home' ? 'home' :
+                    match.winner === 'away' ? 'away' :
+                    outcome(match.home_score, match.away_score);
                   const exact =
                     revealed &&
                     hasResult &&
@@ -317,7 +336,7 @@ export default function MatchCard({
                     p.away_score === match.away_score;
                   const correctOutcome =
                     revealed && hasResult && !exact &&
-                    outcome(p.home_score, p.away_score) === outcome(match.home_score, match.away_score);
+                    outcome(p.home_score, p.away_score) === actual;
                   const sp  = STAGE_PTS[match.stage] ?? STAGE_PTS.GROUP_STAGE;
                   const pts = revealed && hasResult ? (exact ? sp.exact : correctOutcome ? sp.outcome : 0) : null;
                   return (

@@ -14,6 +14,11 @@ const FW   = 108;
 function fill(arr, n) {
   return [...arr, ...Array(Math.max(0, n - arr.length)).fill(null)];
 }
+function parseStats(raw) {
+  if (!raw) return null;
+  try { return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return null; }
+}
+
 function shortCode(name) {
   if (!name) return '';
   if (name.length <= 10) return name;
@@ -29,6 +34,43 @@ function parseBracketNums(label, prefix) {
   if (!label) return [];
   const regex = new RegExp(`${prefix}\\s*#(\\d+)`, 'gi');
   return [...label.matchAll(regex)].map(m => Number(m[1]));
+}
+
+/**
+ * Reordena um lado do bracket (8 R32 / 4 R16 / 2 QF) para flutuar os jogos de
+ * menor matchNumber ao topo, SEM quebrar a árvore: cada par que se enfrenta
+ * permanece junto (as linhas de conexão continuam válidas). Apenas a ordem
+ * vertical das chaves-irmãs muda, do menor matchNumber para o maior.
+ *
+ * A numeração FIFA não é adjacente (R32#2 e R32#5 alimentam o mesmo R16), então
+ * a ordem nunca fica perfeitamente 1,2,3…; mas os menores sobem ao topo.
+ */
+function orderBracketSide(r32Side, r16Side, qfSide) {
+  const leaf = (m) => (m && m.matchNumber != null ? m.matchNumber : Infinity);
+
+  // Reconstrói a hierarquia: QF → 2×R16 → cada R16 com seu par de R32
+  const tree = qfSide.map((qf, qi) => ({
+    qf,
+    r16: [0, 1].map((j) => {
+      const ri = qi * 2 + j;
+      return { node: r16Side[ri], r32: [r32Side[ri * 2], r32Side[ri * 2 + 1]] };
+    }),
+  }));
+
+  const minOf = (arr) => Math.min(...arr.map(leaf));
+
+  // Ordena de baixo para cima: R32 dentro do R16, R16 dentro do QF, QF dentro do lado
+  for (const q of tree) {
+    for (const r of q.r16) r.r32.sort((a, b) => leaf(a) - leaf(b));
+    q.r16.sort((a, b) => minOf(a.r32) - minOf(b.r32));
+  }
+  tree.sort((a, b) => minOf(a.r16.flatMap((r) => r.r32)) - minOf(b.r16.flatMap((r) => r.r32)));
+
+  return {
+    r32: tree.flatMap((q) => q.r16.flatMap((r) => r.r32)),
+    r16: tree.flatMap((q) => q.r16.map((r) => r.node)),
+    qf:  tree.map((q) => q.qf),
+  };
 }
 
 function fmtDate(utc) {
@@ -90,6 +132,12 @@ function PredictCard({ match, playerId, stageKey, matchPredictions, onSaved }) {
   const locked     = match.locked || isFinished;
   const liveMin    = match.liveMinute != null ? `${match.liveMinute}${match.liveInjury ? '+'+match.liveInjury : ''}'` : null;
 
+  // Decisão por pênaltis: placar empatado mas há vencedor (mata-mata)
+  const penaltyWinner =
+    hasScore && match.homeScore === match.awayScore
+      ? (match.winner === 'HOME_TEAM' ? match.home?.name : match.winner === 'AWAY_TEAM' ? match.away?.name : null)
+      : null;
+
   const accent = STAGE_COLOR[stageKey] ?? '#c8aa6e';
 
   async function save() {
@@ -130,8 +178,11 @@ function PredictCard({ match, playerId, stageKey, matchPredictions, onSaved }) {
               {fmtDate(match.utcDate)} · {fmtTime(match.utcDate)}
             </div>
           )}
-          {match.venue && (
-            <div className="text-[9px] text-ink-dim/60">📍 {match.venue}</div>
+          {(match.venue || match.attendance) && !hasScore && (
+            <div className="text-[9px] text-ink-dim/60">
+              {match.venue && <span>📍 {match.venue}</span>}
+              {match.attendance && <span className="ml-1">· 👥 {Number(match.attendance).toLocaleString('pt-BR')}</span>}
+            </div>
           )}
         </div>
       </div>
@@ -179,6 +230,15 @@ function PredictCard({ match, playerId, stageKey, matchPredictions, onSaved }) {
           </div>
         </div>
 
+        {/* Selo de pênaltis */}
+        {penaltyWinner && (
+          <div className="mt-2 text-center">
+            <span className="inline-flex items-center gap-1 rounded-full bg-gold/15 px-2 py-0.5 text-[11px] font-semibold text-gold">
+              🥅 {penaltyWinner} venceu nos pênaltis
+            </span>
+          </div>
+        )}
+
         {/* Goleadores */}
         {hasScore && ((match.homeScorers?.length > 0) || (match.awayScorers?.length > 0)) && (
           <div className="flex justify-between mt-2 text-[10px] text-ink-dim">
@@ -194,6 +254,52 @@ function PredictCard({ match, playerId, stageKey, matchPredictions, onSaved }) {
             </div>
           </div>
         )}
+
+        {/* Estádio, público e estatísticas */}
+        {hasScore && (() => {
+          const hs = parseStats(match.homeStats);
+          const as = parseStats(match.awayStats);
+          const hasStats = hs || as;
+          if (!match.venue && !match.attendance && !hasStats) return null;
+          const ROWS = [
+            { label: 'Posse (%)',   hv: hs?.possession,    av: as?.possession },
+            { label: 'Chutes',      hv: hs?.shots,         av: as?.shots },
+            { label: 'No gol',      hv: hs?.shotsOnTarget, av: as?.shotsOnTarget },
+            { label: 'Escanteios', hv: hs?.corners,       av: as?.corners },
+            { label: 'Faltas',      hv: hs?.fouls,         av: as?.fouls },
+          ].filter((r) => r.hv != null || r.av != null);
+          return (
+            <div className="mt-3 border-t border-white/10 pt-2 space-y-1.5">
+              {(match.venue || match.attendance) && (
+                <div className="text-center text-[10px] text-ink-dim">
+                  {match.venue && <span>📍 {match.venue}</span>}
+                  {match.attendance && (
+                    <span className="ml-2">· 👥 {Number(match.attendance).toLocaleString('pt-BR')}</span>
+                  )}
+                </div>
+              )}
+              {ROWS.map(({ label, hv, av }) => {
+                const h = hv ?? 0;
+                const a = av ?? 0;
+                const total = h + a || 1;
+                const homePct = (h / total) * 100;
+                return (
+                  <div key={label} className="grid grid-cols-[2.5rem_1fr_4.5rem_1fr_2.5rem] items-center gap-1.5 text-[10px]">
+                    <span className="text-right tabular-nums font-semibold text-ink">{hv ?? '–'}</span>
+                    <div className="flex h-1.5 overflow-hidden rounded-full bg-black/30 justify-end">
+                      <div className="h-full rounded-full bg-gold transition-all duration-500" style={{ width: `${homePct}%` }} />
+                    </div>
+                    <span className="text-center text-ink-dim">{label}</span>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-black/30">
+                      <div className="h-full rounded-full bg-ink-dim transition-all duration-500" style={{ width: `${100 - homePct}%` }} />
+                    </div>
+                    <span className="tabular-nums font-semibold text-ink">{av ?? '–'}</span>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Seção de palpite */}
@@ -273,8 +379,12 @@ function PredictCard({ match, playerId, stageKey, matchPredictions, onSaved }) {
                   const revealed = p.revealed !== false && p.home_score != null;
                   const o = (h, a) => h > a ? 'home' : h < a ? 'away' : 'draw';
                   const sp = STAGE_PTS[stageKey] ?? { exact: 3, outcome: 1 };
+                  // Pênaltis: placar empatado mas alguém avançou → usa o `winner`
+                  const actual = match.winner === 'HOME_TEAM' ? 'home'
+                               : match.winner === 'AWAY_TEAM' ? 'away'
+                               : o(match.homeScore, match.awayScore);
                   const exact = revealed && hasScore && p.home_score === match.homeScore && p.away_score === match.awayScore;
-                  const correctOutcome = revealed && hasScore && !exact && o(p.home_score, p.away_score) === o(match.homeScore, match.awayScore);
+                  const correctOutcome = revealed && hasScore && !exact && o(p.home_score, p.away_score) === actual;
                   const pts = revealed && hasScore ? (exact ? sp.exact : correctOutcome ? sp.outcome : 0) : null;
                   return (
                     <span
@@ -676,18 +786,24 @@ export default function Finais() {
   // Monta o bracket usando as posições ESPN dos placeholders para garantir
   // que R16/R32 apareçam no lado correto (esquerdo vs. direito).
   // Copa 2026: SF#1 = QF#1+QF#2, SF#2 = QF#3+QF#4 (QFs cruzam os lados da fase anterior).
-  const allR16 = getMs('LAST_16');
-  const allQF  = getMs('QUARTER_FINALS');
-  const allSF  = getMs('SEMI_FINALS');
+  // matchNumber = número oficial FIFA (R32=73-88, R16=89-96, QF=97-100,
+  // SF=101-102, 3º=103, Final=104). Define a posição EXATA no chaveamento.
+  // O espn_event_id NÃO segue a ordem do bracket (ex: 760508=R16#8, 760509=R16#7),
+  // então ordenar por ele embaralhava os jogos. Ordenamos por matchNumber.
+  const byMatchNumber = (a, b) =>
+    (a.matchNumber ?? a.espnId ?? 9999) - (b.matchNumber ?? b.espnId ?? 9999);
 
-  const byEspnId = (a, b) => (a.espnId ?? 9999) - (b.espnId ?? 9999);
-  const r16ByPos = [...allR16].sort(byEspnId); // índice 0 = R16 ESPN #1
-  const r32ByPos = [...rawR32].sort(byEspnId); // índice 0 = R32 ESPN #1
+  const allR16 = [...getMs('LAST_16')].sort(byMatchNumber);
+  const allQF  = [...getMs('QUARTER_FINALS')].sort(byMatchNumber);
+  const allSF  = [...getMs('SEMI_FINALS')].sort(byMatchNumber);
 
-  // QF por data: [QF#1, QF#2, QF#3, QF#4]
+  const r16ByPos = [...allR16].sort(byMatchNumber);      // índice 0 = R16 #1
+  const r32ByPos = [...rawR32].sort(byMatchNumber);      // índice 0 = R32 #1
+
+  // QF já ordenado por matchNumber: [QF#1, QF#2, QF#3, QF#4]
   // SF[0]=SF#1 usa QF#1+QF#2 → lado esquerdo; SF[1]=SF#2 usa QF#3+QF#4 → direito
-  const qfL = fill(allQF.slice(0, 2), 2);
-  const qfR = fill(allQF.slice(2),    2);
+  const qfL0 = fill(allQF.slice(0, 2), 2);
+  const qfR0 = fill(allQF.slice(2),    2);
   const sfL = fill(allSF.slice(0, 1), 1);
   const sfR = fill(allSF.slice(1),    1);
 
@@ -704,8 +820,8 @@ export default function Finais() {
   });
 
   // Fallback para data se os placeholders não tiverem a info de R16 #N
-  const r16L = fill(r16LMatches.some(Boolean) ? r16LMatches : allR16.slice(0, 4), 4);
-  const r16R = fill(r16RMatches.some(Boolean) ? r16RMatches : allR16.slice(4),    4);
+  const r16L0 = fill(r16LMatches.some(Boolean) ? r16LMatches : allR16.slice(0, 4), 4);
+  const r16R0 = fill(r16RMatches.some(Boolean) ? r16RMatches : allR16.slice(4),    4);
 
   // Monta R32L: para cada R16L, os dois R32 que o alimentam
   const findR32ByTeam = (team) =>
@@ -726,11 +842,18 @@ export default function Finais() {
     // Ambos os lados já têm times confirmados
     return [findR32ByTeam(r16m.home), findR32ByTeam(r16m.away)];
   });
-  const r32LMatches = buildR32Side(r16L);
-  const r32RMatches = buildR32Side(r16R);
+  const r32LMatches = buildR32Side(r16L0);
+  const r32RMatches = buildR32Side(r16R0);
 
-  const r32L = fill(r32LMatches.some(Boolean) ? r32LMatches : rawR32.slice(0, 8), 8);
-  const r32R = fill(r32RMatches.some(Boolean) ? r32RMatches : rawR32.slice(8),    8);
+  const r32L0 = fill(r32LMatches.some(Boolean) ? r32LMatches : rawR32.slice(0, 8), 8);
+  const r32R0 = fill(r32RMatches.some(Boolean) ? r32RMatches : rawR32.slice(8),    8);
+
+  // Reordena cada lado para flutuar os menores matchNumbers ao topo (mantém a
+  // árvore intacta). Em modo projeção (sem matchNumber) preserva a ordem crua.
+  const L = hasOfficialR32 ? orderBracketSide(r32L0, r16L0, qfL0) : { r32: r32L0, r16: r16L0, qf: qfL0 };
+  const R = hasOfficialR32 ? orderBracketSide(r32R0, r16R0, qfR0) : { r32: r32R0, r16: r16R0, qf: qfR0 };
+  const r32L = L.r32, r16L = L.r16, qfL = L.qf;
+  const r32R = R.r32, r16R = R.r16, qfR = R.qf;
 
   const fin  = getMs('FINAL')[0] ?? null;
   const tp   = getMs('THIRD_PLACE')[0] ?? null;

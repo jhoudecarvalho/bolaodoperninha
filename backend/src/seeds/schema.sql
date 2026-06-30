@@ -149,6 +149,11 @@ CREATE TABLE chat_messages (
 
 -- ==========================================
 -- VIEW: ranking calculado automaticamente
+--
+-- Pontos de "vencedor" usam o avanço real (coluna `winner`), não só o sinal do
+-- placar. No mata-mata decidido nos pênaltis o placar fica empatado (ex: 1×1)
+-- mas `winner` aponta quem passou — então quem apostou no time que avançou leva
+-- os pontos de vencedor. Em jogos sem `winner` (grupos), cai no sinal do placar.
 -- ==========================================
 CREATE OR REPLACE VIEW ranking_view AS
 SELECT
@@ -162,7 +167,10 @@ SELECT
   END) AS acertos_exatos,
   SUM(CASE
     WHEN m.home_score IS NOT NULL AND
-         SIGN(pr.home_score - pr.away_score) = SIGN(m.home_score - m.away_score) AND
+         SIGN(pr.home_score - pr.away_score) =
+           (CASE WHEN m.winner = 'home' THEN 1
+                 WHEN m.winner = 'away' THEN -1
+                 ELSE SIGN(m.home_score - m.away_score) END) AND
          NOT (pr.home_score = m.home_score AND pr.away_score = m.away_score)
     THEN 1 ELSE 0
   END) AS acertos_vencedor,
@@ -180,7 +188,10 @@ SELECT
       ELSE 3
     END
     WHEN m.home_score IS NOT NULL AND
-         SIGN(pr.home_score - pr.away_score) = SIGN(m.home_score - m.away_score) AND
+         SIGN(pr.home_score - pr.away_score) =
+           (CASE WHEN m.winner = 'home' THEN 1
+                 WHEN m.winner = 'away' THEN -1
+                 ELSE SIGN(m.home_score - m.away_score) END) AND
          NOT (pr.home_score = m.home_score AND pr.away_score = m.away_score)
     THEN CASE m.stage
       WHEN 'GROUP_STAGE'    THEN 1

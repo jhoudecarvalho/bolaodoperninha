@@ -1,6 +1,17 @@
 import { useEffect, useState } from 'react';
 import { PredictionsAPI } from '../api/client.js';
 import MatchTimer from './MatchTimer.jsx';
+
+const STAGE_PTS = {
+  GROUP_STAGE:    { exact: 3,  outcome: 1 },
+  LAST_32:        { exact: 5,  outcome: 3 },
+  LAST_16:        { exact: 8,  outcome: 5 },
+  QUARTER_FINALS: { exact: 10, outcome: 6 },
+  SEMI_FINALS:    { exact: 13, outcome: 8 },
+  THIRD_PLACE:    { exact: 10, outcome: 6 },
+  FINAL:          { exact: 16, outcome: 10 },
+};
+
 function parseScorers(raw) {
   if (!raw) return [];
   try { return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return []; }
@@ -13,6 +24,15 @@ function parseStats(raw) {
 
 function liveOutcome(h, a) {
   return h > a ? 'home' : h < a ? 'away' : 'draw';
+}
+
+// Decisão por pênaltis: placar empatado mas há um vencedor (mata-mata). Retorna
+// o nome do time que avançou, ou null se não foi nos pênaltis.
+function penaltyWinnerName(m) {
+  if (m.home_score == null || m.home_score !== m.away_score) return null;
+  if (m.winner === 'home') return m.home_name;
+  if (m.winner === 'away') return m.away_name;
+  return null;
 }
 
 export default function LiveBanner({ matches = [] }) {
@@ -84,6 +104,14 @@ export default function LiveBanner({ matches = [] }) {
                 liveInjuryTime={m.live_injury_time}
               />
             </div>
+            {/* Selo de pênaltis */}
+            {penaltyWinnerName(m) && (
+              <div className="mt-1 text-center">
+                <span className="inline-flex items-center gap-1 rounded-full bg-gold/15 px-2 py-0.5 text-[11px] font-semibold text-gold">
+                  🥅 {penaltyWinnerName(m)} venceu nos pênaltis
+                </span>
+              </div>
+            )}
             {/* Goleadores */}
             {(() => {
               const hs = parseScorers(m.home_scorers);
@@ -112,7 +140,13 @@ export default function LiveBanner({ matches = [] }) {
 
               const liveH = m.home_score ?? 0;
               const liveA = m.away_score ?? 0;
-              const curOutcome = liveOutcome(liveH, liveA);
+              // Encerrado nos pênaltis: placar empatado mas alguém avançou → usa `winner`
+              const curOutcome =
+                m.winner === 'home' ? 'home' :
+                m.winner === 'away' ? 'away' :
+                liveOutcome(liveH, liveA);
+
+              const sp = STAGE_PTS[m.stage] ?? STAGE_PTS.GROUP_STAGE;
 
               const exact   = preds.filter((p) => p.home_score === liveH && p.away_score === liveA);
               const ahead   = preds.filter((p) => {
@@ -132,7 +166,7 @@ export default function LiveBanner({ matches = [] }) {
                         <span key={p.player_id} className="inline-flex items-center gap-1 rounded-full bg-gold/20 px-2 py-0.5 text-xs font-medium text-gold ring-1 ring-gold/40">
                           🥇 {p.player_name}
                           <b className="tabular-nums">{p.home_score}×{p.away_score}</b>
-                          <b>+3</b>
+                          <b>+{sp.exact}</b>
                         </span>
                       ))}
                     </div>
@@ -143,7 +177,7 @@ export default function LiveBanner({ matches = [] }) {
                         <span key={p.player_id} className="inline-flex items-center gap-1 rounded-full bg-yellow-400/15 px-2 py-0.5 text-xs text-yellow-300 ring-1 ring-yellow-400/30">
                           🟡 {p.player_name}
                           <b className="tabular-nums">{p.home_score}×{p.away_score}</b>
-                          <b>+1</b>
+                          <b>+{sp.outcome}</b>
                         </span>
                       ))}
                     </div>

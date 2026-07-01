@@ -74,6 +74,9 @@ export default function Detail() {
           <div className="space-y-2">
             {data.predictions.map((p) => {
               const hasResult = p.real_home != null;
+              // Exato = placar cravado. Caso contrário, pontos>0 = acertou o
+              // vencedor (o backend já trata fase/pênaltis no valor de pontos).
+              const exact = hasResult && p.pred_home === p.real_home && p.pred_away === p.real_away;
               return (
                 <div key={p.match_id} className="card flex items-center justify-between p-3 text-sm">
                   <div className="flex flex-1 items-center gap-2">
@@ -83,19 +86,23 @@ export default function Detail() {
                     </span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="text-ink-mut">
-                      Palpite: <b className="text-ink">{p.pred_home} × {p.pred_away}</b>
-                    </span>
+                    {p.revealed === false ? (
+                      <span className="text-ink-dim">🔒 <span className="italic">oculto até começar</span></span>
+                    ) : (
+                      <span className="text-ink-mut">
+                        Palpite: <b className="text-ink">{p.pred_home} × {p.pred_away}</b>
+                      </span>
+                    )}
                     {hasResult && (
                       <span className="text-ink-mut">
                         Real: <b className="text-gold">{p.real_home} × {p.real_away}</b>
                       </span>
                     )}
                     {hasResult ? (
-                      p.pontos === 3 ? (
-                        <span className="font-bold text-ok">✓ +3</span>
-                      ) : p.pontos === 1 ? (
-                        <span className="font-bold text-yellow-400">~ +1</span>
+                      exact ? (
+                        <span className="font-bold text-gold">🎯 +{p.pontos}</span>
+                      ) : p.pontos > 0 ? (
+                        <span className="font-bold text-yellow-400">✓ +{p.pontos}</span>
                       ) : (
                         <span className="font-bold text-danger">✗</span>
                       )

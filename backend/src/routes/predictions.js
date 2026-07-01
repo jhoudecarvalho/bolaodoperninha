@@ -70,14 +70,15 @@ router.get('/', async (req, res) => {
     `;
     const [rows] = await pool.query(sql, params);
 
-    // Placar oculto para outros jogadores até o jogo começar (anti-spoiler).
+    // Placar oculto para outros jogadores até o jogo começar (anti-cola).
     // O próprio usuário logado sempre vê seu placar — independente do horário.
-    const maskScores = !player_id;
+    // (NÃO liberar por causa do filtro player_id: isso vazava palpites de
+    //  jogos ainda não iniciados de qualquer jogador consultado via API.)
     const myPlayerId = req.user?.player_id;
     const out = rows.map((r) => {
       const started  = Boolean(Number(r.started));
       const isOwn    = myPlayerId != null && r.player_id === myPlayerId;
-      const revealed = started || !maskScores || isOwn;
+      const revealed = started || isOwn;
       return {
         ...r,
         started,

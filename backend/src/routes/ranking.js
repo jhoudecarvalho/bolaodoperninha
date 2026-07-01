@@ -67,6 +67,7 @@ router.get('/:player_id/detail', async (req, res) => {
     const [rows] = await pool.query(
       `SELECT
          m.id AS match_id, m.group_id, m.kick_off_utc, m.status,
+         (UTC_TIMESTAMP() >= m.kick_off_utc) AS started,
          m.home_score AS real_home, m.away_score AS real_away, m.result_source,
          t1.name AS home_name, t1.flag_emoji AS home_flag,
          t2.name AS away_name, t2.flag_emoji AS away_flag,
@@ -111,6 +112,18 @@ router.get('/:player_id/detail', async (req, res) => {
 
     const baseTotal = rows.reduce((sum, r) => sum + (Number(r.pontos) || 0), 0);
 
+    // Anti-cola: palpite de OUTRO jogador só é revelado após o jogo começar.
+    // O próprio jogador (dono do detalhe) sempre vê tudo. Admin não é exceção.
+    const isOwn = req.user?.player_id != null &&
+                  Number(req.params.player_id) === req.user.player_id;
+    const predictions = rows.map((r) => {
+      const started  = Boolean(Number(r.started));
+      const revealed = started || isOwn;
+      return revealed
+        ? { ...r, revealed: true }
+        : { ...r, pred_home: null, pred_away: null, revealed: false };
+    });
+
     // Bônus campeão
     const [[finalMatch]] = await pool.query(`
       SELECT home_team_id, away_team_id, winner
@@ -140,7 +153,7 @@ router.get('/:player_id/detail', async (req, res) => {
       total_pontos: baseTotal + bonusCampeao,
       bonus_campeao: bonusCampeao,
       acertou_campeao: acertouCampeao,
-      predictions: rows,
+      predictions,
     });
   } catch (err) {
     console.error(err);

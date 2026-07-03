@@ -245,17 +245,27 @@ function parseESPN(data) {
       else if (simple) { minute = Number(simple[1]); }
     }
 
-    // Goleadores a partir do array details (inclui gols contra e pênaltis)
+    // Goleadores a partir do array details. Separa gols do tempo normal/prorrogação
+    // das cobranças da disputa de pênaltis (d.shootout === true), que a ESPN marca
+    // no minuto 120' e não devem poluir a lista de goleadores.
     const teamSide = {};
     for (const c of comp.competitors || []) teamSide[c.team?.id] = c.homeAway;
     const homeScorers = [], awayScorers = [];
+    const homeShootout = [], awayShootout = [];
     for (const d of comp.details || []) {
-      if (!d.scoringPlay) continue;
       const side = teamSide[d.team?.id];
+      if (side !== 'home' && side !== 'away') continue;
       const name = d.athletesInvolved?.[0]?.shortName || d.athletesInvolved?.[0]?.displayName || '?';
-      const min  = Number((d.clock?.displayValue || '').replace(/[^0-9]/g, '')) || 0;
-      if (side === 'home') homeScorers.push({ name, minute: min });
-      else if (side === 'away') awayScorers.push({ name, minute: min });
+      if (d.shootout) {
+        // A ESPN só lista as cobranças convertidas; se aparecer "Missed", marca scored=false.
+        const scored = d.scoringPlay === true || /scored/i.test(d.type?.text || '');
+        (side === 'home' ? homeShootout : awayShootout).push({ name, scored });
+        continue;
+      }
+      if (!d.scoringPlay) continue;
+      // Mantém acréscimos legíveis: "90'+1'" → "90+1", "13'" → "13" (nunca "901")
+      const min = (d.clock?.displayValue || '').replace(/'/g, '').replace(/\s/g, '') || '0';
+      (side === 'home' ? homeScorers : awayScorers).push({ name, minute: min });
     }
 
     // Vencedor (null em caso de empate)
@@ -290,7 +300,7 @@ function parseESPN(data) {
       homeScore: home.score, awayScore: away.score,
       homePenalties, awayPenalties,
       finished, paused, minute, injuryTime,
-      homeScorers, awayScorers, winner,
+      homeScorers, awayScorers, homeShootout, awayShootout, winner,
       venue, attendance, homeStats, awayStats,
     });
   }
@@ -471,7 +481,7 @@ export async function syncScores() {
   const [matches] = await pool.query(
     `SELECT m.id, m.group_id, m.home_score, m.away_score, m.status, m.result_source,
             m.live_minute, m.home_scorers, m.away_scorers, m.winner,
-            m.home_penalties, m.away_penalties,
+            m.home_penalties, m.away_penalties, m.home_shootout, m.away_shootout,
             m.venue, m.attendance, m.home_stats, m.away_stats,
             t1.name_en AS home_en, t2.name_en AS away_en
      FROM matches m
@@ -528,6 +538,8 @@ export async function syncScores() {
     const newInjury      = g.finished ? null : (g.injuryTime ?? null);
     const newHomeScorers = g.homeScorers?.length  ? JSON.stringify(g.homeScorers)  : null;
     const newAwayScorers = g.awayScorers?.length  ? JSON.stringify(g.awayScorers)  : null;
+    const newHomeShootout = g.homeShootout?.length ? JSON.stringify(g.homeShootout) : null;
+    const newAwayShootout = g.awayShootout?.length ? JSON.stringify(g.awayShootout) : null;
     const newHomeStats   = g.homeStats             ? JSON.stringify(g.homeStats)    : null;
     const newAwayStats   = g.awayStats             ? JSON.stringify(g.awayStats)    : null;
     const newVenue       = g.venue       || null;
@@ -543,12 +555,15 @@ export async function syncScores() {
     const penaltiesUnchanged =
       (g.homePenalties == null || m.home_penalties != null) &&
       (g.awayPenalties == null || m.away_penalties != null);
+    const shootoutUnchanged =
+      (newHomeShootout == null || m.home_shootout != null) &&
+      (newAwayShootout == null || m.away_shootout != null);
     if (
       m.home_score  === g.homeScore &&
       m.away_score  === g.awayScore &&
       m.status      === newStatus   &&
       m.live_minute === newMinute   &&
-      scorersUnchanged && statsUnchanged && penaltiesUnchanged &&
+      scorersUnchanged && statsUnchanged && penaltiesUnchanged && shootoutUnchanged &&
       (newVenue == null || m.venue) &&
       (newAttendance == null || m.attendance)
     ) continue;
@@ -562,6 +577,8 @@ export async function syncScores() {
              winner       = COALESCE(?, winner),
              home_penalties = COALESCE(?, home_penalties),
              away_penalties = COALESCE(?, away_penalties),
+             home_shootout = COALESCE(?, home_shootout),
+             away_shootout = COALESCE(?, away_shootout),
              venue        = COALESCE(?, venue),
              attendance   = COALESCE(?, attendance),
              home_stats   = COALESCE(?, home_stats),
@@ -571,6 +588,7 @@ export async function syncScores() {
       [g.homeScore, g.awayScore, newStatus, newMinute, newInjury,
        newHomeScorers, newAwayScorers, g.winner ?? null,
        g.homePenalties ?? null, g.awayPenalties ?? null,
+       newHomeShootout, newAwayShootout,
        newVenue, newAttendance, newHomeStats, newAwayStats, m.id]
     );
     broadcast('result', {

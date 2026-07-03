@@ -4,12 +4,8 @@ import { useAuth } from '../auth/AuthContext.jsx';
 import ScoreInput from '../components/ScoreInput.jsx';
 import CountdownTimer from '../components/CountdownTimer.jsx';
 import { formatLocal, isToday } from '../utils/datetime.js';
+import MatchGoals from '../components/MatchGoals.jsx';
 import { useSSE } from '../hooks/useSSE.js';
-
-function parseScorers(raw) {
-  if (!raw) return [];
-  try { return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return []; }
-}
 
 function matchOutcome(h, a) {
   return h > a ? 'home' : h < a ? 'away' : 'draw';
@@ -289,21 +285,14 @@ export default function Predictions() {
                         )}
                       </div>
                     )}
-                    {(() => {
-                      const hs = parseScorers(m.home_scorers);
-                      const as = parseScorers(m.away_scorers);
-                      if (!hs.length && !as.length) return null;
-                      return (
-                        <div className="mt-1 flex justify-between text-xs text-ink-mut px-1">
-                          <div className="flex flex-col gap-0.5">
-                            {hs.map((s, i) => <span key={i}>⚽ {s.name} {s.minute}'</span>)}
-                          </div>
-                          <div className="flex flex-col gap-0.5 text-right">
-                            {as.map((s, i) => <span key={i}>{s.minute}' {s.name} ⚽</span>)}
-                          </div>
-                        </div>
-                      );
-                    })()}
+                    <div className="px-1">
+                      <MatchGoals
+                        homeScorers={m.home_scorers}
+                        awayScorers={m.away_scorers}
+                        homeShootout={m.home_shootout}
+                        awayShootout={m.away_shootout}
+                      />
+                    </div>
 
                     {(() => {
                       const who = predictors[m.id] || [];

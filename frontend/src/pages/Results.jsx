@@ -3,11 +3,7 @@ import { MatchesAPI, ResultsAPI } from '../api/client.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import { formatLocal } from '../utils/datetime.js';
 import { useSSE } from '../hooks/useSSE.js';
-
-function parseScorers(raw) {
-  if (!raw) return [];
-  try { return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return []; }
-}
+import MatchGoals from '../components/MatchGoals.jsx';
 
 function parseStats(raw) {
   if (!raw) return null;
@@ -206,26 +202,15 @@ export default function Results() {
                 </div>
               </div>
 
-              {/* Gols */}
-              {hasResult && (() => {
-                const hs = parseScorers(m.home_scorers);
-                const as = parseScorers(m.away_scorers);
-                if (!hs.length && !as.length) return null;
-                return (
-                  <div className="mt-2 flex justify-between text-xs text-ink-mut">
-                    <div className="space-y-0.5">
-                      {hs.map((s, i) => (
-                        <div key={i}>⚽ {s.name} <span className="text-gold">{s.minute}'</span></div>
-                      ))}
-                    </div>
-                    <div className="space-y-0.5 text-right">
-                      {as.map((s, i) => (
-                        <div key={i}><span className="text-gold">{s.minute}'</span> {s.name} ⚽</div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
+              {/* Gols + disputa de pênaltis */}
+              {hasResult && (
+                <MatchGoals
+                  homeScorers={m.home_scorers}
+                  awayScorers={m.away_scorers}
+                  homeShootout={m.home_shootout}
+                  awayShootout={m.away_shootout}
+                />
+              )}
 
               {/* Acertadores / acertando agora */}
               {hasResult && (() => {

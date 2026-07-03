@@ -5,6 +5,7 @@ import CountdownTimer from './CountdownTimer.jsx';
 import MatchTimer from './MatchTimer.jsx';
 import ScoreInput from './ScoreInput.jsx';
 import MatchStatsModal from './MatchStatsModal.jsx';
+import MatchGoals from './MatchGoals.jsx';
 
 const STAGE_LABELS = {
   GROUP_STAGE:    (g) => g ? `Grupo ${g}` : 'Fase de Grupos',
@@ -29,11 +30,6 @@ const STAGE_PTS = {
 function stageLabel(stage) {
   const fn = STAGE_LABELS[stage] ?? STAGE_LABELS.GROUP_STAGE;
   return fn();
-}
-
-function parseScorers(raw) {
-  if (!raw) return [];
-  try { return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return []; }
 }
 
 function parseStats(raw) {
@@ -249,25 +245,14 @@ export default function MatchCard({
         </div>
       )}
 
-      {hasResult && (() => {
-        const hs = parseScorers(match.home_scorers);
-        const as = parseScorers(match.away_scorers);
-        if (!hs.length && !as.length) return null;
-        return (
-          <div className="mt-2 flex justify-between text-xs text-ink-mut">
-            <div className="space-y-0.5">
-              {hs.map((s, i) => (
-                <div key={i}>⚽ {s.name} <span className="text-gold">{s.minute}'</span></div>
-              ))}
-            </div>
-            <div className="space-y-0.5 text-right">
-              {as.map((s, i) => (
-                <div key={i}><span className="text-gold">{s.minute}'</span> {s.name} ⚽</div>
-              ))}
-            </div>
-          </div>
-        );
-      })()}
+      {hasResult && (
+        <MatchGoals
+          homeScorers={match.home_scorers}
+          awayScorers={match.away_scorers}
+          homeShootout={match.home_shootout}
+          awayShootout={match.away_shootout}
+        />
+      )}
 
       {/* Linha compacta: estádio + público (ao vivo e pausado) */}
       {(match.status === 'live' || match.status === 'paused') && (match.venue || match.attendance) && (

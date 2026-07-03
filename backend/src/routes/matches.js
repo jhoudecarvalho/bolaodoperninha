@@ -22,6 +22,7 @@ const BASE_SELECT = `
   SELECT
     m.id, m.group_id, m.stage, m.match_date, m.kick_off_utc, m.venue, m.attendance, m.status,
     m.home_score, m.away_score, m.winner, m.home_penalties, m.away_penalties,
+    m.home_shootout, m.away_shootout,
     m.result_source, m.result_updated_at,
     m.live_minute, m.live_injury_time,
     m.home_scorers, m.away_scorers, m.home_stats, m.away_stats,

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { KnockoutAPI, PredictionsAPI } from '../api/client.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import { useSSE } from '../hooks/useSSE.js';
+import MatchGoals from '../components/MatchGoals.jsx';
 
 // ─── Dimensões do bracket (visual only) ──────────────────────────────────────
 const R32H = 42;
@@ -252,20 +253,15 @@ function PredictCard({ match, playerId, stageKey, matchPredictions, onSaved }) {
           </div>
         )}
 
-        {/* Goleadores */}
-        {hasScore && ((match.homeScorers?.length > 0) || (match.awayScorers?.length > 0)) && (
-          <div className="flex justify-between mt-2 text-[10px] text-ink-dim">
-            <div className="space-y-0.5">
-              {(match.homeScorers ?? []).map((s, i) => (
-                <div key={i}>⚽ {s.name} <span className="text-gold">{s.minute}'</span></div>
-              ))}
-            </div>
-            <div className="space-y-0.5 text-right">
-              {(match.awayScorers ?? []).map((s, i) => (
-                <div key={i}><span className="text-gold">{s.minute}'</span> {s.name} ⚽</div>
-              ))}
-            </div>
-          </div>
+        {/* Goleadores + disputa de pênaltis */}
+        {hasScore && (
+          <MatchGoals
+            compact
+            homeScorers={match.homeScorers}
+            awayScorers={match.awayScorers}
+            homeShootout={match.homeShootout}
+            awayShootout={match.awayShootout}
+          />
         )}
 
         {/* Estádio, público e estatísticas */}

@@ -29,7 +29,7 @@ async function buildFromDB(playerId) {
        m.id, m.fd_match_id, m.espn_event_id, m.match_number, m.stage, m.kick_off_utc, m.venue,
        m.attendance, m.home_stats, m.away_stats,
        m.status, m.home_score, m.away_score, m.winner,
-       m.home_penalties, m.away_penalties,
+       m.home_penalties, m.away_penalties, m.home_shootout, m.away_shootout,
        m.live_minute, m.live_injury_time,
        m.home_scorers, m.away_scorers,
        m.home_placeholder, m.away_placeholder,
@@ -84,6 +84,8 @@ async function buildFromDB(playerId) {
       awayStats:   r.away_stats ?? null,
       homeScorers: r.home_scorers ?? [],
       awayScorers: r.away_scorers ?? [],
+      homeShootout: r.home_shootout ?? [],
+      awayShootout: r.away_shootout ?? [],
       ...(pred ? { myPrediction: pred } : {}),
     });
   }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { PredictionsAPI } from '../api/client.js';
 import MatchTimer from './MatchTimer.jsx';
+import MatchGoals from './MatchGoals.jsx';
 
 const STAGE_PTS = {
   GROUP_STAGE:    { exact: 3,  outcome: 1 },
@@ -11,11 +12,6 @@ const STAGE_PTS = {
   THIRD_PLACE:    { exact: 10, outcome: 6 },
   FINAL:          { exact: 16, outcome: 10 },
 };
-
-function parseScorers(raw) {
-  if (!raw) return [];
-  try { return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return []; }
-}
 
 function parseStats(raw) {
   if (!raw) return null;
@@ -120,26 +116,13 @@ export default function LiveBanner({ matches = [] }) {
                 </span>
               </div>
             )}
-            {/* Goleadores */}
-            {(() => {
-              const hs = parseScorers(m.home_scorers);
-              const as = parseScorers(m.away_scorers);
-              if (!hs.length && !as.length) return null;
-              return (
-                <div className="mt-2 flex justify-between text-xs text-ink-mut gap-2">
-                  <div className="flex flex-col gap-0.5">
-                    {hs.map((s, i) => (
-                      <span key={i}>⚽ {s.name} {s.minute}'</span>
-                    ))}
-                  </div>
-                  <div className="flex flex-col gap-0.5 text-right">
-                    {as.map((s, i) => (
-                      <span key={i}>{s.minute}' {s.name} ⚽</span>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
+            {/* Goleadores + disputa de pênaltis */}
+            <MatchGoals
+              homeScorers={m.home_scorers}
+              awayScorers={m.away_scorers}
+              homeShootout={m.home_shootout}
+              awayShootout={m.away_shootout}
+            />
 
             {/* Apostas ao vivo */}
             {(() => {

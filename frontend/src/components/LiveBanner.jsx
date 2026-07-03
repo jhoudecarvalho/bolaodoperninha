@@ -35,6 +35,14 @@ function penaltyWinnerName(m) {
   return null;
 }
 
+// Placar da disputa de pênaltis na ótica do vencedor (ex: "4 × 2"), ou null.
+function penaltyScore(m) {
+  if (!penaltyWinnerName(m) || m.home_penalties == null || m.away_penalties == null) return null;
+  return m.winner === 'home'
+    ? `${m.home_penalties} × ${m.away_penalties}`
+    : `${m.away_penalties} × ${m.home_penalties}`;
+}
+
 export default function LiveBanner({ matches = [] }) {
   const [predsByMatch, setPredsByMatch] = useState({});
 
@@ -108,7 +116,7 @@ export default function LiveBanner({ matches = [] }) {
             {penaltyWinnerName(m) && (
               <div className="mt-1 text-center">
                 <span className="inline-flex items-center gap-1 rounded-full bg-gold/15 px-2 py-0.5 text-[11px] font-semibold text-gold">
-                  🥅 {penaltyWinnerName(m)} venceu nos pênaltis
+                  🥅 {penaltyWinnerName(m)} venceu nos pênaltis{penaltyScore(m) ? ` (${penaltyScore(m)})` : ''}
                 </span>
               </div>
             )}

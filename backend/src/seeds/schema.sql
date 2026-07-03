@@ -60,6 +60,8 @@ CREATE TABLE matches (
   home_scorers JSON DEFAULT NULL,
   away_scorers JSON DEFAULT NULL,
   winner ENUM('home','away') DEFAULT NULL,
+  home_penalties TINYINT UNSIGNED DEFAULT NULL,
+  away_penalties TINYINT UNSIGNED DEFAULT NULL,
 
   FOREIGN KEY (group_id) REFERENCES `groups`(id),
   FOREIGN KEY (home_team_id) REFERENCES teams(id),

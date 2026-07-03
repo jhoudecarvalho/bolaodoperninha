@@ -103,6 +103,13 @@ export default function MatchCard({
     hasResult && match.home_score === match.away_score
       ? (match.winner === 'home' ? match.home_name : match.winner === 'away' ? match.away_name : null)
       : null;
+  // Placar da disputa, sempre na ótica do vencedor (ex: "4 × 2")
+  const penScore =
+    penaltyWinner && match.home_penalties != null && match.away_penalties != null
+      ? (match.winner === 'home'
+          ? `${match.home_penalties} × ${match.away_penalties}`
+          : `${match.away_penalties} × ${match.home_penalties}`)
+      : null;
 
   // Sincroniza quando o pai atualiza matchPredictions (ex: após salvar)
   useEffect(() => {
@@ -237,7 +244,7 @@ export default function MatchCard({
       {penaltyWinner && (
         <div className="mt-2 text-center">
           <span className="inline-flex items-center gap-1 rounded-full bg-gold/15 px-2 py-0.5 text-xs font-semibold text-gold">
-            🥅 {penaltyWinner} venceu nos pênaltis
+            🥅 {penaltyWinner} venceu nos pênaltis{penScore ? ` (${penScore})` : ''}
           </span>
         </div>
       )}

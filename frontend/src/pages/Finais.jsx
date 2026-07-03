@@ -29,6 +29,12 @@ function shortFull(name) {
   if (name.length <= 13) return name;
   return name.slice(0, 12) + '…';
 }
+// Jogo decidido nos pênaltis: placar empatado, há vencedor e temos as cobranças.
+function hasPens(m) {
+  return m && m.homeScore != null && m.homeScore === m.awayScore
+    && m.homePenalties != null && m.awayPenalties != null
+    && (m.winner === 'HOME_TEAM' || m.winner === 'AWAY_TEAM');
+}
 // Extrai números de posição ESPN de um texto de placeholder (ex: "Vencedor R32 #3" → [3])
 function parseBracketNums(label, prefix) {
   if (!label) return [];
@@ -137,6 +143,13 @@ function PredictCard({ match, playerId, stageKey, matchPredictions, onSaved }) {
     hasScore && match.homeScore === match.awayScore
       ? (match.winner === 'HOME_TEAM' ? match.home?.name : match.winner === 'AWAY_TEAM' ? match.away?.name : null)
       : null;
+  // Placar da disputa, sempre na ótica do vencedor (ex: "4 × 2")
+  const penScore =
+    penaltyWinner && match.homePenalties != null && match.awayPenalties != null
+      ? (match.winner === 'HOME_TEAM'
+          ? `${match.homePenalties} × ${match.awayPenalties}`
+          : `${match.awayPenalties} × ${match.homePenalties}`)
+      : null;
 
   const accent = STAGE_COLOR[stageKey] ?? '#c8aa6e';
 
@@ -234,7 +247,7 @@ function PredictCard({ match, playerId, stageKey, matchPredictions, onSaved }) {
         {penaltyWinner && (
           <div className="mt-2 text-center">
             <span className="inline-flex items-center gap-1 rounded-full bg-gold/15 px-2 py-0.5 text-[11px] font-semibold text-gold">
-              🥅 {penaltyWinner} venceu nos pênaltis
+              🥅 {penaltyWinner} venceu nos pênaltis{penScore ? ` (${penScore})` : ''}
             </span>
           </div>
         )}
@@ -522,7 +535,7 @@ function R32Card({ match }) {
         {match.home
           ? <><span className="text-xs leading-none shrink-0">{match.home.flag}</span>
               <span className={`text-[10px] font-semibold truncate flex-1 ${homeWon ? 'text-gold' : 'text-ink'}`}>{shortCode(match.home.name)}</span>
-              {hasScore && <span className={`text-[10px] font-bold tabular-nums ${homeWon ? 'text-gold' : 'text-ink-mut'}`}>{match.homeScore}</span>}
+              {hasScore && <span className={`text-[10px] font-bold tabular-nums ${homeWon ? 'text-gold' : 'text-ink-mut'}`}>{match.homeScore}{hasPens(match) && <span className="ml-0.5 font-semibold text-gold/70">({match.homePenalties})</span>}</span>}
             </>
           : <span className="text-[8px] text-ink-dim italic flex-1">{match.homeLabel ?? 'A definir'}</span>
         }
@@ -532,7 +545,7 @@ function R32Card({ match }) {
         {match.away
           ? <><span className="text-xs leading-none shrink-0">{match.away.flag}</span>
               <span className={`text-[10px] font-semibold truncate flex-1 ${awayWon ? 'text-gold' : 'text-ink'}`}>{shortCode(match.away.name)}</span>
-              {hasScore && <span className={`text-[10px] font-bold tabular-nums ${awayWon ? 'text-gold' : 'text-ink-mut'}`}>{match.awayScore}</span>}
+              {hasScore && <span className={`text-[10px] font-bold tabular-nums ${awayWon ? 'text-gold' : 'text-ink-mut'}`}>{match.awayScore}{hasPens(match) && <span className="ml-0.5 font-semibold text-gold/70">({match.awayPenalties})</span>}</span>}
             </>
           : <span className="text-[8px] text-ink-dim italic flex-1">{match.awayLabel ?? 'A definir'}</span>
         }
@@ -579,7 +592,7 @@ function PhaseCard({ match, slotH }) {
           {match.home
             ? <><span className="text-sm leading-none shrink-0">{match.home.flag}</span>
                 <span className={`text-[11px] font-semibold truncate flex-1 ${homeWon ? 'text-gold' : 'text-ink'}`}>{shortFull(match.home.name)}</span>
-                {hasScore && <span className={`text-sm font-bold tabular-nums ${homeWon ? 'text-gold' : 'text-ink-mut'}`}>{match.homeScore}</span>}</>
+                {hasScore && <span className={`text-sm font-bold tabular-nums ${homeWon ? 'text-gold' : 'text-ink-mut'}`}>{match.homeScore}{hasPens(match) && <span className="ml-0.5 text-[10px] font-semibold text-gold/70">({match.homePenalties})</span>}</span>}</>
             : <span className="text-[9px] text-ink-dim italic truncate flex-1">{match.homeLabel ?? 'A definir'}</span>
           }
         </div>
@@ -588,7 +601,7 @@ function PhaseCard({ match, slotH }) {
           {match.away
             ? <><span className="text-sm leading-none shrink-0">{match.away.flag}</span>
                 <span className={`text-[11px] font-semibold truncate flex-1 ${awayWon ? 'text-gold' : 'text-ink'}`}>{shortFull(match.away.name)}</span>
-                {hasScore && <span className={`text-sm font-bold tabular-nums ${awayWon ? 'text-gold' : 'text-ink-mut'}`}>{match.awayScore}</span>}</>
+                {hasScore && <span className={`text-sm font-bold tabular-nums ${awayWon ? 'text-gold' : 'text-ink-mut'}`}>{match.awayScore}{hasPens(match) && <span className="ml-0.5 text-[10px] font-semibold text-gold/70">({match.awayPenalties})</span>}</span>}</>
             : <span className="text-[9px] text-ink-dim italic truncate flex-1">{match.awayLabel ?? 'A definir'}</span>
           }
         </div>
@@ -640,7 +653,7 @@ function FinalCard({ match }) {
           {match.home
             ? <><span className="text-sm leading-none">{match.home.flag}</span>
                 <span className={`text-[11px] font-semibold truncate flex-1 ${homeWon ? 'text-gold' : 'text-ink'}`}>{shortFull(match.home.name)}</span>
-                {hasScore && <span className="text-sm font-bold tabular-nums text-gold">{match.homeScore}</span>}</>
+                {hasScore && <span className="text-sm font-bold tabular-nums text-gold">{match.homeScore}{hasPens(match) && <span className="ml-0.5 text-[10px] font-semibold text-gold/70">({match.homePenalties})</span>}</span>}</>
             : <span className="text-[9px] text-ink-dim italic truncate flex-1">{match.homeLabel ?? 'A definir'}</span>
           }
         </div>
@@ -649,7 +662,7 @@ function FinalCard({ match }) {
           {match.away
             ? <><span className="text-sm leading-none">{match.away.flag}</span>
                 <span className={`text-[11px] font-semibold truncate flex-1 ${awayWon ? 'text-gold' : 'text-ink'}`}>{shortFull(match.away.name)}</span>
-                {hasScore && <span className="text-sm font-bold tabular-nums text-gold">{match.awayScore}</span>}</>
+                {hasScore && <span className="text-sm font-bold tabular-nums text-gold">{match.awayScore}{hasPens(match) && <span className="ml-0.5 text-[10px] font-semibold text-gold/70">({match.awayPenalties})</span>}</span>}</>
             : <span className="text-[9px] text-ink-dim italic truncate flex-1">{match.awayLabel ?? 'A definir'}</span>
           }
         </div>

@@ -220,10 +220,20 @@ function parseESPN(data) {
     for (const c of comp.competitors || []) {
       const name  = normalizeName(c.team?.displayName);
       const score = hasScore ? Number(c.score) : null;
-      if (c.homeAway === 'home') home = { name, score };
-      else if (c.homeAway === 'away') away = { name, score };
+      const pen   = c.shootoutScore != null && c.shootoutScore !== '' ? Number(c.shootoutScore) : null;
+      if (c.homeAway === 'home') home = { name, score, pen };
+      else if (c.homeAway === 'away') away = { name, score, pen };
     }
     if (!home || !away) continue;
+
+    // Disputa de pênaltis (mata-mata): a ESPN preenche `shootoutScore` só quando
+    // o jogo empatou no tempo normal/prorrogação e foi pra decisão. Guardamos
+    // apenas nesse caso — jogos sem disputa vêm com shootoutScore 0/ausente.
+    const isShootout =
+      finished && home.score != null && home.score === away.score &&
+      home.pen != null && away.pen != null && (home.pen > 0 || away.pen > 0);
+    const homePenalties = isShootout ? home.pen : null;
+    const awayPenalties = isShootout ? away.pen : null;
 
     // Minuto ao vivo a partir do displayClock ("67'" ou "45'+2'")
     let minute = null, injuryTime = null;
@@ -278,6 +288,7 @@ function parseESPN(data) {
     out.push({
       home: home.name, away: away.name,
       homeScore: home.score, awayScore: away.score,
+      homePenalties, awayPenalties,
       finished, paused, minute, injuryTime,
       homeScorers, awayScorers, winner,
       venue, attendance, homeStats, awayStats,
@@ -460,6 +471,7 @@ export async function syncScores() {
   const [matches] = await pool.query(
     `SELECT m.id, m.group_id, m.home_score, m.away_score, m.status, m.result_source,
             m.live_minute, m.home_scorers, m.away_scorers, m.winner,
+            m.home_penalties, m.away_penalties,
             m.venue, m.attendance, m.home_stats, m.away_stats,
             t1.name_en AS home_en, t2.name_en AS away_en
      FROM matches m
@@ -528,12 +540,15 @@ export async function syncScores() {
     const statsUnchanged =
       (newHomeStats == null || m.home_stats != null) &&
       (newAwayStats == null || m.away_stats != null);
+    const penaltiesUnchanged =
+      (g.homePenalties == null || m.home_penalties != null) &&
+      (g.awayPenalties == null || m.away_penalties != null);
     if (
       m.home_score  === g.homeScore &&
       m.away_score  === g.awayScore &&
       m.status      === newStatus   &&
       m.live_minute === newMinute   &&
-      scorersUnchanged && statsUnchanged &&
+      scorersUnchanged && statsUnchanged && penaltiesUnchanged &&
       (newVenue == null || m.venue) &&
       (newAttendance == null || m.attendance)
     ) continue;
@@ -545,6 +560,8 @@ export async function syncScores() {
              home_scorers = COALESCE(?, home_scorers),
              away_scorers = COALESCE(?, away_scorers),
              winner       = COALESCE(?, winner),
+             home_penalties = COALESCE(?, home_penalties),
+             away_penalties = COALESCE(?, away_penalties),
              venue        = COALESCE(?, venue),
              attendance   = COALESCE(?, attendance),
              home_stats   = COALESCE(?, home_stats),
@@ -553,6 +570,7 @@ export async function syncScores() {
        WHERE id = ?`,
       [g.homeScore, g.awayScore, newStatus, newMinute, newInjury,
        newHomeScorers, newAwayScorers, g.winner ?? null,
+       g.homePenalties ?? null, g.awayPenalties ?? null,
        newVenue, newAttendance, newHomeStats, newAwayStats, m.id]
     );
     broadcast('result', {
@@ -592,8 +610,11 @@ export async function backfillStats() {
      JOIN teams t1 ON t1.id = m.home_team_id
      JOIN teams t2 ON t2.id = m.away_team_id
      WHERE m.status = 'finished'
-       AND (m.home_stats IS NULL OR m.away_stats IS NULL OR m.attendance IS NULL)
-       AND m.result_source != 'manual'`
+       AND m.result_source != 'manual'
+       AND (
+         m.home_stats IS NULL OR m.away_stats IS NULL OR m.attendance IS NULL
+         OR (m.winner IS NOT NULL AND m.home_score = m.away_score AND m.home_penalties IS NULL)
+       )`
   );
 
   if (!rows.length) return { updated: 0 };
@@ -628,20 +649,25 @@ export async function backfillStats() {
       if (alreadyUpdated.has(m.id)) continue;
       const g = espnMap.get(key(m.home_en, m.away_en));
       if (!g) continue;
-      if (!g.venue && !g.attendance && !g.homeStats && !g.awayStats) continue;
+      if (!g.venue && !g.attendance && !g.homeStats && !g.awayStats &&
+          g.homePenalties == null && g.awayPenalties == null) continue;
 
       await pool.query(
         `UPDATE matches
-           SET venue      = COALESCE(venue, ?),
-               attendance = COALESCE(attendance, ?),
-               home_stats = COALESCE(home_stats, ?),
-               away_stats = COALESCE(away_stats, ?)
+           SET venue          = COALESCE(venue, ?),
+               attendance     = COALESCE(attendance, ?),
+               home_stats     = COALESCE(home_stats, ?),
+               away_stats     = COALESCE(away_stats, ?),
+               home_penalties = COALESCE(home_penalties, ?),
+               away_penalties = COALESCE(away_penalties, ?)
          WHERE id = ?`,
         [
           g.venue       || null,
           g.attendance  ?? null,
           g.homeStats   ? JSON.stringify(g.homeStats) : null,
           g.awayStats   ? JSON.stringify(g.awayStats) : null,
+          g.homePenalties ?? null,
+          g.awayPenalties ?? null,
           m.id,
         ]
       );

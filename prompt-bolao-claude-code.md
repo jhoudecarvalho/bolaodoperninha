@@ -577,7 +577,7 @@ Animações:        fadeIn, slideUp nos cards (0.3-0.5s ease)
 DB_HOST=localhost
 DB_PORT=3306
 DB_USER=bolao
-DB_PASSWORD=bolao2026
+DB_PASSWORD=troque-esta-senha
 DB_NAME=bolao_copa2026
 
 # Server
@@ -603,10 +603,10 @@ services:
   mysql:
     image: mysql:8.0
     environment:
-      MYSQL_ROOT_PASSWORD: root
+      MYSQL_ROOT_PASSWORD: ${BOLAO_MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: bolao_copa2026
       MYSQL_USER: bolao
-      MYSQL_PASSWORD: bolao2026
+      MYSQL_PASSWORD: ${BOLAO_DB_PASSWORD}
     ports:
       - "3306:3306"
     volumes:
@@ -621,7 +621,7 @@ services:
     environment:
       DB_HOST: mysql
       DB_USER: bolao
-      DB_PASSWORD: bolao2026
+      DB_PASSWORD: ${BOLAO_DB_PASSWORD}
       DB_NAME: bolao_copa2026
 
   frontend:

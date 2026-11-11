@@ -44,7 +44,7 @@ Pré-requisitos: Node 20+, MySQL 8/9 rodando.
 # 1. Banco e usuário (uma vez)
 mysql -u root <<'SQL'
 CREATE DATABASE IF NOT EXISTS bolao_copa2026 CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS 'bolao'@'localhost' IDENTIFIED BY 'bolao2026';
+CREATE USER IF NOT EXISTS 'bolao'@'localhost' IDENTIFIED BY 'troque-esta-senha';  -- a mesma de DB_PASSWORD em backend/.env
 GRANT ALL PRIVILEGES ON bolao_copa2026.* TO 'bolao'@'localhost';
 FLUSH PRIVILEGES;
 SQL
@@ -69,6 +69,7 @@ npm run dev       # http://localhost:5180  (proxia /api -> :3001)
 ## Docker (alternativa)
 
 ```bash
+cp .env.example .env   # defina BOLAO_DB_PASSWORD e BOLAO_MYSQL_ROOT_PASSWORD (ex.: openssl rand -hex 24)
 docker compose up --build
 # frontend: http://localhost:5173 | backend: http://localhost:3001
 ```

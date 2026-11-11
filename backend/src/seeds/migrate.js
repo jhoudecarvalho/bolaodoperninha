@@ -16,7 +16,7 @@ async function migrate() {
     host: process.env.DB_HOST || 'localhost',
     port: Number(process.env.DB_PORT) || 3306,
     user: process.env.DB_USER || 'bolao',
-    password: process.env.DB_PASSWORD || 'bolao2026',
+    password: process.env.DB_PASSWORD,
     multipleStatements: true,
   });
 
